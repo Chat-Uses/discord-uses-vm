@@ -629,8 +629,8 @@ def vbox_layout(widget: QWidget, spacing: int = 16) -> QVBoxLayout:
 # ---------------------------------------------------------------------------
 
 NAV = [
-    ("Dashboard"), ("Discord"), ("Virtual Machine"), ( "Commands"),
-    ("Moderation"), ("Activity"), ("Logs"),
+    (" ", "Dashboard"), (" ", "Discord"), (" ", "Virtual Machine"), (" ", "Commands"),
+    (" ", "Moderation"), (" ", "Activity"), (" ", "Logs"),
 ]
 
 
