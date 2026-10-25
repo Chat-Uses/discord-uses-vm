@@ -19,6 +19,17 @@
   "start_mode": "headless",
   "revert_snapshot": "",
   "auto_revert_minutes": 0,
+  "watchdog": true,
+  "live_channel_id": 0,
+  "live_interval": 30,
+  "live_message_id": 0,
+  "macros": {
+    "cmd": "!run cmd",
+    "notepad": "!run notepad",
+    "hello": "!run cmd !wait 2 !send echo \"hello, world!\"",
+    "taskmgr": "!combo ctrl+shift+esc",
+    "desktop": "!combo win+d"
+  },
   "disabled_commands": [],
   "cooldown": 3.0,
   "screenshot_delay": 1.5,

@@ -991,6 +991,30 @@ class MainWindow(QMainWindow):
         extra.addWidget(self.chk_log_ss)
         lf.addRow("Options", extra)
         v.addWidget(logs)
+
+        live = QGroupBox("Live screen")
+        lsf = form(live)
+        lsf.addRow(hint("The bot keeps one message in this channel updated with a fresh screenshot, "
+                        "so people can watch without typing commands. Leave empty to turn it off."))
+        self.live_channel_edit = id_edit("Channel ID")
+        self.live_channel_edit.setMaximumWidth(220)
+        self.live_channel_pick = QComboBox()
+        self.live_channel_pick.setToolTip("Channels appear once the bot is online")
+        self.live_channel_pick.activated.connect(
+            lambda i: self.live_channel_pick.itemData(i) and self.live_channel_edit.setText(
+                str(self.live_channel_pick.itemData(i))))
+        lrow = QHBoxLayout()
+        lrow.setSpacing(8)
+        lrow.addWidget(self.live_channel_edit)
+        lrow.addWidget(self.live_channel_pick, 1)
+        lrow.addWidget(button("Clear", lambda: self.live_channel_edit.clear()))
+        lsf.addRow("Channel", lrow)
+        self.live_interval_spin = QSpinBox()
+        self.live_interval_spin.setRange(15, 3600)
+        self.live_interval_spin.setSuffix(" s")
+        self.live_interval_spin.setMaximumWidth(140)
+        lsf.addRow("Update every", self.live_interval_spin)
+        v.addWidget(live)
         self.on_channels([])
         v.addStretch()
         return w
@@ -1026,6 +1050,9 @@ class MainWindow(QMainWindow):
         f.addRow("Start mode", self.start_mode_combo)
         self.chk_start_on_launch = Toggle("Start the VM when the bot starts (if it's off)")
         f.addRow("", self.chk_start_on_launch)
+        self.chk_watchdog = Toggle("Watchdog: start the VM again if it crashes or is shut down from inside")
+        self.chk_watchdog.setToolTip("Not when you power it off from this panel")
+        f.addRow("", self.chk_watchdog)
         v.addWidget(vb)
 
         power = QGroupBox("Power")
@@ -1184,6 +1211,28 @@ class MainWindow(QMainWindow):
         self.vote_cooldown_spin.setSuffix(" s")
         vf.addRow("Wait after a revert/reboot", self.vote_cooldown_spin)
         v.addWidget(votes)
+
+        macros = QGroupBox("Macros")
+        mv = QVBoxLayout(macros)
+        mv.setSpacing(10)
+        mv.addWidget(hint("Shortcuts anyone can run with !m <name>. Write the commands with ! and "
+                          "chain them, e.g. !run cmd !wait 2 !send dir"))
+        self.macro_table = QTableWidget(0, 2)
+        self.macro_table.setHorizontalHeaderLabels(["Name", "Commands"])
+        self.macro_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.macro_table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.macro_table.verticalHeader().setVisible(False)
+        self.macro_table.setShowGrid(False)
+        self.macro_table.setColumnWidth(0, 160)
+        self.macro_table.setMinimumHeight(200)
+        mv.addWidget(self.macro_table)
+        mrow = QHBoxLayout()
+        mrow.setSpacing(8)
+        mrow.addWidget(button("Add macro", self.add_macro_row, "primary"))
+        mrow.addWidget(button("Remove", self.remove_macro_rows))
+        mrow.addStretch()
+        mv.addLayout(mrow)
+        v.addWidget(macros)
         v.addStretch()
         return w
 
@@ -1352,8 +1401,42 @@ class MainWindow(QMainWindow):
         self.vote_window_spin.setValue(c.vote_window_minutes)
         self.vote_timeout_spin.setValue(c.vote_timeout)
         self.vote_cooldown_spin.setValue(c.vote_cooldown)
+        self.chk_watchdog.setChecked(c.watchdog)
+        self.live_channel_edit.setText(str(c.live_channel_id) if c.live_channel_id else "")
+        self.live_interval_spin.setValue(c.live_interval)
+        self.macro_table.setRowCount(0)
+        for name, text in sorted(c.macros.items()):
+            self.add_macro_row(name, text)
 
         self.populate_moderation()
+
+    def add_macro_row(self, name: str = "", text: str = ""):
+        row = self.macro_table.rowCount()
+        self.macro_table.insertRow(row)
+        self.macro_table.setItem(row, 0, QTableWidgetItem(name or ""))
+        self.macro_table.setItem(row, 1, QTableWidgetItem(text or "!"))
+        if not name:
+            self.macro_table.editItem(self.macro_table.item(row, 0))
+
+    def remove_macro_rows(self):
+        for row in sorted({i.row() for i in self.macro_table.selectedIndexes()}, reverse=True):
+            self.macro_table.removeRow(row)
+
+    def collect_macros(self) -> dict[str, str]:
+        macros, bad = {}, []
+        for row in range(self.macro_table.rowCount()):
+            name = (self.macro_table.item(row, 0).text() if self.macro_table.item(row, 0) else "").strip().lower()
+            text = (self.macro_table.item(row, 1).text() if self.macro_table.item(row, 1) else "").strip()
+            if not name and text in ("", "!"):
+                continue  # empty row
+            if not name or " " in name or not text.startswith("!") or text == "!":
+                bad.append(name or "?")
+                continue
+            macros[name] = text
+        if bad:
+            self.log("warn", T("Ignoring macros that need a one-word name and commands starting with !: {names}")
+                     .format(names=", ".join(bad)))
+        return macros
 
     def populate_moderation(self):
         c = self.config
@@ -1403,6 +1486,13 @@ class MainWindow(QMainWindow):
         c.vote_window_minutes = self.vote_window_spin.value()
         c.vote_timeout = self.vote_timeout_spin.value()
         c.vote_cooldown = self.vote_cooldown_spin.value()
+        c.watchdog = self.chk_watchdog.isChecked()
+        new_live = int(self.live_channel_edit.text() or 0)
+        if new_live != c.live_channel_id:
+            c.live_message_id = 0  # new channel: post a fresh message there
+        c.live_channel_id = new_live
+        c.live_interval = self.live_interval_spin.value()
+        c.macros = self.collect_macros()
 
         c.mod_role = self.mod_role_edit.text().strip()
         c.mod_user_ids = self.mods_editor.values()
@@ -1516,6 +1606,7 @@ class MainWindow(QMainWindow):
             chk.setText(self.command_label(name))
         self.update_bot_ui()
         self.poll_vm_state()
+        self._set_revert_options([], self.config.revert_snapshot)  # refresh_snapshots refills it when a VM is set
         self.refresh_snapshots()
         self.refresh_vm_info()
         self.on_channels(self.last_channels)
@@ -1602,6 +1693,15 @@ class MainWindow(QMainWindow):
                 self.log_channel_pick.addItem(name, cid)
             idx = self.log_channel_pick.findData(int(self.log_channel_edit.text() or 0))
             self.log_channel_pick.setCurrentIndex(max(0, idx))
+
+        if hasattr(self, "live_channel_pick"):
+            self.live_channel_pick.clear()
+            self.live_channel_pick.addItem(
+                T("Pick a channel…") if channels else T("Start the bot to pick from a list"), 0)
+            for cid, name in sorted(channels, key=lambda c: c[1].lower()):
+                self.live_channel_pick.addItem(name, cid)
+            idx = self.live_channel_pick.findData(int(self.live_channel_edit.text() or 0))
+            self.live_channel_pick.setCurrentIndex(max(0, idx))
 
     def open_invite(self):
         token = self.token_edit.text().strip()
@@ -1909,6 +2009,7 @@ class MainWindow(QMainWindow):
                 != QMessageBox.StandardButton.Yes:
             return
         self.log("info", T("Restoring '{name}'…").format(name=name))
+        self.hold_watchdog()
         self.run_task(self.vbox.revert, name, self.start_mode_combo.currentText(),
                       done=lambda _: (self.log("ok", T("Restored '{name}'").format(name=name)),
                                       self.refresh_snapshots(),
@@ -1925,9 +2026,16 @@ class MainWindow(QMainWindow):
         # message is English for the Discord log; the panel shows it translated
         if confirm and QMessageBox.question(self, APP_NAME, T(confirm)) != QMessageBox.StandardButton.Yes:
             return
+        if method in ("poweroff", "acpi_shutdown"):
+            self.hold_watchdog()
         self.run_task(getattr(self.vbox, method),
                       done=lambda _: (self.log("ok", T(message)), self.poll_vm_state(), self.discord_log(message),
                                       QTimer.singleShot(1000, lambda: self.refresh_preview(force=True))))
+
+    def hold_watchdog(self):
+        """The VM is being powered off on purpose: the bot's watchdog shouldn't start it again."""
+        if self.bot_thread and self.bot_thread.bot:
+            self.bot_thread.bot.watchdog_hold = True
 
     def vm_revert(self):
         snap = self.revert_combo.currentData() or ""
@@ -1937,6 +2045,7 @@ class MainWindow(QMainWindow):
                 != QMessageBox.StandardButton.Yes:
             return
         self.log("info", T("Reverting to {label}…").format(label=shown))
+        self.hold_watchdog()
 
         def done(_):
             self.log("ok", T("Reverted"))

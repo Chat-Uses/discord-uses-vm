@@ -4,12 +4,22 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 CONFIG_PATH = Path(__file__).with_name("config.json")
+STATS_PATH = Path(__file__).with_name("stats.json")  # !stats leaderboard, kept across restarts
 DEFAULT_VBOXMANAGE = r"C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"
 
 PUBLIC_COMMANDS = [
-    "key", "combo", "type", "send", "click", "move", "drag", "scroll",
-    "screen", "grid", "wait", "chain", "startvm", "keys", "help", "vminfo", "stats",
+    "key", "combo", "type", "send", "run", "click", "move", "drag", "scroll",
+    "screen", "grid", "wait", "chain", "macro", "macros", "startvm", "keys", "help", "vminfo", "stats",
 ]
+
+# Example macros; always written with "!", whatever the command prefix is
+DEFAULT_MACROS = {
+    "cmd": "!run cmd",
+    "notepad": "!run notepad",
+    "hello": '!run cmd !wait 2 !send echo "hello, world!"',
+    "taskmgr": "!combo ctrl+shift+esc",
+    "desktop": "!combo win+d",
+}
 # Anyone can vote for these; a mod's vote runs them instantly
 VOTE_COMMANDS = ["revert", "reboot"]
 MOD_COMMANDS = ["lock", "unlock", "ban", "unban"]
@@ -53,6 +63,15 @@ class Config:
     start_mode: str = "headless"  # headless | gui | separate
     revert_snapshot: str = ""  # empty = current snapshot
     auto_revert_minutes: int = 0  # 0 = off
+    watchdog: bool = True  # start the VM again if it crashes or is shut down from inside
+
+    # Live screen: one message kept updated with a fresh screenshot
+    live_channel_id: int = 0  # 0 = off
+    live_interval: int = 30  # seconds
+    live_message_id: int = 0  # set by the bot, so it reuses its message after a restart
+
+    # Macros: name -> chained commands, run with !macro <name> / !m <name>
+    macros: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_MACROS))
 
     # Commands & limits
     disabled_commands: list[str] = field(default_factory=list)

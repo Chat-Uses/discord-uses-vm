@@ -5,7 +5,9 @@ People type commands in a Discord channel. The bot runs them on a VirtualBox VM 
 ```
 !key win              !key enter 3           !combo win+r
 !combo ctrl+alt+del   !type hello            !send notepad      (type + Enter)
+!run                  !run notepad           (open the Run box, optionally run something)
 !click 500 300        !click 500 300 right   !drag 100 100 400 300   !scroll down 5
+!m cmd                !macros                (saved macros)
 !screen   !grid   !wait 5   !startvm   !keys   !vminfo   !stats   !help
 Votes: !revert  !reboot   (instant for mods; mods can also do !revert <snapshot>)
 Mods: !lock  !unlock  !ban @user  !unban @user
@@ -17,7 +19,15 @@ Mods: !lock  !unlock  !ban @user  !unban @user
 !combo win+r !wait 2 !send cmd !wait 2 !send echo "hello, world!"
 ```
 
-Chainable: key, combo, type, send, click, move, drag, scroll, wait, screen, grid. Limits (10 commands, 30 s of waiting per message) are on the Commands page.
+Chainable: key, combo, type, send, run, click, move, drag, scroll, wait, screen, grid. Limits (10 commands, 30 s of waiting per message) are on the Commands page.
+
+**Macros:** named chains you set up on the Commands page, which anyone runs with `!m <name>` (e.g. `!m cmd` → `!run cmd`). Write them with `!` even if you changed the prefix.
+
+**Live screen:** pick a channel on the Discord page, and the bot keeps one message there updated with a fresh screenshot (every 30 s by default), so people can watch without typing.
+
+**Watchdog:** if the VM crashes or someone shuts it down from inside (`!send shutdown /s`), the bot starts it again within about 30 seconds. Powering it off from the panel doesn't trigger it. Toggle it on the Virtual Machine page.
+
+**Stats:** the `!stats` leaderboard is saved in `stats.json`, so it survives restarts and updates.
 
 **Voting:** anyone can type `!revert` or `!reboot` to start or join a vote. It passes once 50% of the people who chatted in the command channels in the last 10 minutes have voted (rounded up, so 4 active people need 2 votes). Votes expire after 2 minutes, and there's a 1-minute wait after a revert/reboot before a new vote can start. All of these are adjustable on the Commands page. `!vminfo` shows the active count and current votes.
 

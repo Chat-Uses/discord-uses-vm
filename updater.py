@@ -25,7 +25,7 @@ APP_DIR = Path(__file__).resolve().parent
 LATEST_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 
 # Never overwritten or created by an update
-KEEP = {"config.json", "logs", "assets", "backup", ".git", "__pycache__", ".venv", "venv"}
+KEEP = {"config.json", "stats.json", "logs", "assets", "backup", ".git", "__pycache__", ".venv", "venv"}
 
 # Downloads only come from GitHub
 ALLOWED_HOSTS = {

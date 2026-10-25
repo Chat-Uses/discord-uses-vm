@@ -1,10 +1,10 @@
 """The Discord bot: runs commands on the VM, then replies with a screenshot."""
 import asyncio
 import io
+import json
 import math
 import re
 import time
-from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
@@ -12,7 +12,7 @@ from typing import Callable
 import discord
 from discord.ext import commands
 
-from config import MOD_COMMANDS, VOTE_COMMANDS, Config
+from config import MOD_COMMANDS, STATS_PATH, VOTE_COMMANDS, Config
 from vbox_control import ALIASES, KEYS, VBox, VBoxError, add_grid, normalize_combo
 
 
@@ -51,13 +51,14 @@ class Step:
 
 
 # Commands that can be chained in one message, e.g. "!combo win+r !wait 2 !send notepad"
-CHAINABLE = ["key", "combo", "type", "send", "click", "move", "drag", "scroll", "wait", "screen", "grid"]
+CHAINABLE = ["key", "combo", "type", "send", "run", "click", "move", "drag", "scroll", "wait", "screen", "grid"]
 
 USAGE = {
     "key": "{p}key <key> [times]",
     "combo": "{p}combo <key+key…> [times]",
     "type": "{p}type <text>",
     "send": "{p}send <text>",
+    "run": "{p}run [program]",
     "click": "{p}click <x> <y> [left|right|middle|double]",
     "move": "{p}move <x> <y>",
     "drag": "{p}drag <x1> <y1> <x2> <y2>",
@@ -108,11 +109,13 @@ class VMBot(commands.Bot):
         self.events = events or Events()
         self.vbox = VBox(config)
         self.vm_lock = asyncio.Lock()  # one action at a time so screenshots match
-        self.usage: Counter[str] = Counter()
-        self.total_commands = 0
+        self.stats = self._load_stats()  # {"total": n, "users": {id: {"name", "count"}}}
+        self.total_commands = 0  # since this start
         self.started_at = time.time()
         self.last_revert = time.monotonic()
-        self._auto_revert_task = None
+        self._tasks: list[asyncio.Task] = []
+        self.watchdog_hold = False  # set when the panel powers the VM off on purpose
+        self._live_message = None
         self._blocked_logged: dict[int, float] = {}  # user id -> last time, to avoid log spam
         self.chatters: dict[int, float] = {}  # user id -> last message in a command channel
         self.votes: dict[str, dict] = {}  # "revert"/"reboot" -> {"voters": set, "started": t}
@@ -122,7 +125,8 @@ class VMBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.add_cog(VMCog(self))
-        self._auto_revert_task = asyncio.create_task(self._auto_revert_loop())
+        self._tasks = [asyncio.create_task(loop()) for loop in
+                       (self._auto_revert_loop, self._watchdog_loop, self._live_loop)]
 
     async def on_ready(self) -> None:
         self.events.log("info", f"Logged in as {self.user} (ID {self.user.id})")
@@ -143,8 +147,8 @@ class VMBot(commands.Bot):
         )
 
     async def close(self) -> None:
-        if self._auto_revert_task:
-            self._auto_revert_task.cancel()
+        for task in self._tasks:
+            task.cancel()
         if self.is_ready() and not self.is_closed():
             try:
                 await asyncio.wait_for(self.log_event(
@@ -175,9 +179,10 @@ class VMBot(commands.Bot):
             return
         await self.process_commands(message)
 
-    def split_chain(self, content: str) -> list[tuple[str, str]] | None:
+    def split_chain(self, content: str, prefix: str | None = None) -> list[tuple[str, str]] | None:
         """'!combo win+r !wait 2 !send hi' -> [('combo', 'win+r'), ('wait', '2'), ('send', 'hi')].
-        Returns None if the text doesn't start with a chainable command."""
+        Returns None if the text doesn't start with a chainable command.
+        prefix defaults to the bot's prefix; macros always use "!"."""
         names = {}
         for canonical in CHAINABLE:
             cmd = self.get_command(canonical)
@@ -187,7 +192,7 @@ class VMBot(commands.Bot):
                 names[n.lower()] = canonical
         if not names:
             return None
-        p = re.escape(self.config.prefix)
+        p = re.escape(prefix or self.config.prefix)
         alternatives = "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
         # A command starts at the beginning or after whitespace, and ends at whitespace or the end
         pattern = re.compile(rf"(?:^|(?<=\s)){p}({alternatives})(?=\s|$)", re.IGNORECASE)
@@ -391,9 +396,29 @@ class VMBot(commands.Bot):
             embed.set_image(url="attachment://log.png")
         await self.send_log(embed=embed, **({"file": file} if file else {}))
 
+    @staticmethod
+    def _load_stats() -> dict:
+        try:
+            data = json.loads(STATS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data.get("users"), dict):
+                return {"total": int(data.get("total", 0)), "users": data["users"]}
+        except (OSError, ValueError):
+            pass
+        return {"total": 0, "users": {}}
+
+    def _save_stats(self) -> None:
+        try:
+            STATS_PATH.write_text(json.dumps(self.stats), encoding="utf-8")
+        except OSError as e:
+            self.events.log("warn", f"Couldn't save stats: {e}")
+
     def record(self, ctx, ok: bool, result: str) -> None:
         self.total_commands += 1
-        self.usage[str(ctx.author)] += 1
+        self.stats["total"] += 1
+        user = self.stats["users"].setdefault(str(ctx.author.id), {"name": "", "count": 0})
+        user["name"] = str(ctx.author)  # keep the latest name
+        user["count"] += 1
+        self._save_stats()
         self.events.command(str(ctx.author), ctx.author.id, ctx.message.content, ok, result)
         self.events.log("info" if ok else "warn", f"{ctx.author}: {ctx.message.content} -> {result}")
 
@@ -403,7 +428,7 @@ class VMBot(commands.Bot):
             png = await asyncio.to_thread(add_grid, png, self.config.grid_size)
         return png
 
-    async def run_steps(self, ctx, steps: list[Step]) -> None:
+    async def run_steps(self, ctx, steps: list[Step], title: str = "") -> None:
         """Run steps in order on the VM, then reply with the screenshot(s).
         A chain shows one screenshot at the end, plus one for each !screen/!grid in it."""
         cfg = self.config
@@ -429,7 +454,9 @@ class VMBot(commands.Bot):
                 except VBoxError as e:
                     error = f"Step {len(done) + 1}: {e}" if len(steps) > 1 else str(e)
 
-        if len(steps) == 1:
+        if title:
+            label = f"{title} · " + " → ".join(done)
+        elif len(steps) == 1:
             label = steps[0].label
         else:
             label = "⛓️ " + " → ".join(done)
@@ -501,6 +528,87 @@ class VMBot(commands.Bot):
                 "log_vm_events", f"⏪ **Auto revert** (every {minutes} min)", discord.Color.orange()
             )
 
+    async def _watchdog_loop(self) -> None:
+        """Start the VM again if it crashed or was shut down from inside (e.g. !send shutdown /s)."""
+        await self.wait_until_ready()
+        while not self.is_closed():
+            await asyncio.sleep(30)
+            if not self.config.watchdog or not self.config.vm_name:
+                continue
+            try:
+                state = await asyncio.to_thread(self.vbox.state)
+            except VBoxError:
+                continue
+            if state == "running":
+                self.watchdog_hold = False  # the panel started it again
+                continue
+            if self.watchdog_hold or state not in ("poweroff", "aborted"):
+                continue
+            if self.vm_lock.locked():
+                continue  # a revert/startvm is busy with the VM
+            self.events.log("warn", f"Watchdog: VM was '{state}', starting it again")
+            try:
+                async with self.vm_lock:
+                    await asyncio.to_thread(self.vbox.start, self.config.start_mode)
+            except VBoxError as e:
+                self.events.log("error", f"Watchdog couldn't start the VM: {e}")
+                continue
+            reason = "crashed" if state == "aborted" else "was shut down"
+            for cid in self.config.command_channel_ids:
+                channel = await self.get_channel_safe(cid)
+                if channel is not None:
+                    try:
+                        await channel.send(f"🛠️ The VM {reason}, so I started it again.")
+                    except discord.HTTPException:
+                        pass
+            await self.log_event("log_vm_events", f"🛠️ **Watchdog:** the VM {reason}, started it again",
+                                 discord.Color.orange())
+
+    async def _live_loop(self) -> None:
+        """Keep one message in the live channel updated with a fresh screenshot."""
+        await self.wait_until_ready()
+        while not self.is_closed():
+            await asyncio.sleep(max(15, self.config.live_interval))
+            cid = self.config.live_channel_id
+            if not cid or not self.config.vm_name:
+                continue
+            try:
+                await self._update_live(cid)
+            except Exception as e:
+                self.events.log("warn", f"Live screen update failed: {e}")
+
+    async def _update_live(self, channel_id: int) -> None:
+        channel = await self.get_channel_safe(channel_id)
+        if channel is None:
+            return
+        try:
+            state = await asyncio.to_thread(self.vbox.state)
+            png = await self._screenshot(False) if state == "running" else None
+        except VBoxError:
+            state, png = "unavailable", None
+        now = int(time.time())
+        text = (f"🖥️ **Live screen** · {self.config.vm_name} · {state}\n"
+                f"Updated <t:{now}:R> · type `{self.config.prefix}help` in the command channel to play")
+        files = [discord.File(io.BytesIO(png), "live.png")] if png else []
+
+        msg = self._live_message
+        if msg is None or msg.channel.id != channel_id:
+            msg = None
+            if self.config.live_message_id:
+                try:
+                    msg = await channel.fetch_message(self.config.live_message_id)
+                except discord.HTTPException:
+                    msg = None
+        if msg is not None:
+            try:
+                self._live_message = await msg.edit(content=text, attachments=files)
+                return
+            except discord.HTTPException:
+                pass  # deleted or not ours any more: post a new one
+        self._live_message = await channel.send(text, files=files)
+        self.config.live_message_id = self._live_message.id
+        self.config.save()
+
     async def on_command_error(self, ctx: commands.Context, error) -> None:
         if isinstance(error, commands.CommandNotFound):
             return
@@ -516,7 +624,7 @@ class VMBot(commands.Bot):
             return
         elif isinstance(error, (commands.UserInputError,)):
             name = ctx.command.qualified_name
-            if name in USAGE or name == "chain":
+            if name in USAGE or name in ("chain", "macro"):
                 # These commands already put the usage in their error message
                 await ctx.reply(f"❌ {error}", mention_author=False)
             else:
@@ -623,6 +731,19 @@ class VMCog(commands.Cog):
                 self.vbox.send_combo("enter")
             return Step(f"⌨️ sent “{shown}” ⏎" if text else "⌨️ ⏎", send)
 
+        if name == "run":
+            program = args.strip()
+            if not program:
+                return Step("🏃 opened Run", lambda: self.vbox.send_combo("win+r"))
+            self._check_text(ctx, program)
+
+            def run_program():
+                self.vbox.send_combo("win+r")
+                time.sleep(1.5)  # let the Run box open before typing
+                self.vbox.send_text(program)
+                self.vbox.send_combo("enter")
+            return Step(f"🏃 ran “{discord.utils.escape_markdown(program)}”", run_program)
+
         if name == "click":
             need(2, 3)
             x, y = self._int(a[0], "x"), self._int(a[1], "y")
@@ -699,6 +820,12 @@ class VMCog(commands.Cog):
         """Type text, then press Enter: !send notepad"""
         await self._run_one(ctx, "send", args)
 
+    @commands.command(aliases=["open"])
+    @cooldown
+    async def run(self, ctx, *, args: str = ""):
+        """Open the Run box (Win+R), optionally run a program: !run, !run notepad"""
+        await self._run_one(ctx, "run", args)
+
     # --- mouse --------------------------------------------------------------
 
     @commands.command()
@@ -758,22 +885,59 @@ class VMCog(commands.Cog):
         segments = self.bot.split_chain(content)
         if not segments:
             raise commands.BadArgument(f"Nothing to run. Example: `{p}combo win+r {p}wait 2 {p}send notepad`")
+        await self._run_segments(ctx, segments, p)
+
+    async def _run_segments(self, ctx, segments: list[tuple[str, str]], shown_prefix: str,
+                            label: str = "") -> None:
+        """Check every step of a chain or macro first, then run them all."""
+        cfg = self.cfg
         if len(segments) > cfg.max_chain_steps:
             raise Denied(f"⛓️ Max {cfg.max_chain_steps} commands per message.")
         steps, total_wait = [], 0.0
         for i, (name, args) in enumerate(segments, 1):
             if name in cfg.disabled_commands:
-                raise Denied(f"🚫 `{p}{name}` is disabled.")
+                raise Denied(f"🚫 `{cfg.prefix}{name}` is disabled.")
             try:
                 step = self.parse_step(ctx, name, args)
             except commands.BadArgument as e:
-                shown = f"{p}{name} {args}".strip()
+                shown = f"{shown_prefix}{name} {args}".strip()
                 raise commands.BadArgument(f"Step {i} (`{shown}`): {e}")
             total_wait += step.wait
             steps.append(step)
         if total_wait > cfg.max_chain_wait:
             raise Denied(f"⛓️ The waits add up to {total_wait:g}s; max is {cfg.max_chain_wait:g}s per message.")
-        await self.bot.run_steps(ctx, steps)
+        await self.bot.run_steps(ctx, steps, label)
+
+    # --- macros -----------------------------------------------------------------
+
+    @commands.command(aliases=["m"])
+    @cooldown
+    async def macro(self, ctx, name: str = ""):
+        """Run a saved macro: !macro cmd, !m notepad"""
+        p = self.cfg.prefix
+        macros = {k.lower(): v for k, v in self.cfg.macros.items()}
+        if not name:
+            raise commands.BadArgument(f"Usage: `{p}macro <name>`. See `{p}macros` for the list.")
+        text = macros.get(name.lower())
+        if text is None:
+            raise commands.BadArgument(f"No macro called `{name}`. See `{p}macros` for the list.")
+        segments = self.bot.split_chain(text, prefix="!")
+        if not segments:
+            raise commands.BadArgument(f"Macro `{name}` is broken: it must start with a command like `!combo`.")
+        await self._run_segments(ctx, segments, "!", label=f"🧩 `{name}`")
+
+    @commands.command()
+    async def macros(self, ctx):
+        """List saved macros"""
+        p = self.cfg.prefix
+        if not self.cfg.macros:
+            await ctx.reply("No macros yet. Mods can add them in the control panel.", mention_author=False)
+            return
+        lines = [f"`{p}m {discord.utils.escape_markdown(n)}` → {discord.utils.escape_markdown(t)}"
+                 for n, t in sorted(self.cfg.macros.items())]
+        embed = discord.Embed(title="🧩 Macros", description="\n".join(lines)[:4000],
+                              color=discord.Color.blurple())
+        await ctx.reply(embed=embed, mention_author=False)
 
     @commands.command(aliases=["start", "poweron"])
     @cooldown
@@ -841,14 +1005,17 @@ class VMCog(commands.Cog):
     @commands.command(aliases=["leaderboard", "top"])
     async def stats(self, ctx):
         """Command leaderboard"""
-        top = self.bot.usage.most_common(10)
-        lines = [f"**{i}.** {discord.utils.escape_markdown(name)}: {n}" for i, (name, n) in enumerate(top, 1)]
+        users = sorted(self.bot.stats["users"].values(), key=lambda u: u["count"], reverse=True)[:10]
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+        lines = [f"{medals.get(i, f'**{i}.**')} {discord.utils.escape_markdown(u['name'])}: {u['count']}"
+                 for i, u in enumerate(users, 1)]
         embed = discord.Embed(
             title="📊 Stats",
             description="\n".join(lines) or "No commands yet.",
             color=discord.Color.gold(),
         )
-        embed.set_footer(text=f"{self.bot.total_commands} commands since the bot started")
+        embed.set_footer(text=f"{self.bot.stats['total']} commands in total · "
+                              f"{self.bot.total_commands} since the bot started")
         await ctx.reply(embed=embed, mention_author=False)
 
     @commands.command(name="help", aliases=["commands"])
@@ -859,6 +1026,8 @@ class VMCog(commands.Cog):
             "combo": f"`{p}combo <key+key…>` press keys together, e.g. `{p}combo win+r`",
             "type": f"`{p}type <text>` type text",
             "send": f"`{p}send <text>` type text and press Enter",
+            "run": f"`{p}run [program]` open the Run box, e.g. `{p}run notepad`",
+            "macro": f"`{p}m <name>` run a saved macro (`{p}macros` lists them)",
             "click": f"`{p}click <x> <y> [left|right|middle|double]` click (use `{p}grid` to find x/y)",
             "grid": f"`{p}grid` screenshot with a coordinate grid, for aiming clicks",
             "move": f"`{p}move <x> <y>` move the mouse",

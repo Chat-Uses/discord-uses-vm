@@ -1,5 +1,6 @@
 # Your settings, including the bot token. Never commit this.
 config.json
+stats.json
 
 # Generated at runtime
 logs/

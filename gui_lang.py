@@ -309,6 +309,26 @@ DA = {
     "VM powered off": "VM slukket",
     "Language: {name}": "Sprog: {name}",
 
+    # Macros, live screen, watchdog (v1.1)
+    "Macros": "Makroer",
+    "Shortcuts anyone can run with !m <name>. Write the commands with ! and chain them, "
+    "e.g. !run cmd !wait 2 !send dir":
+        "Genveje som alle kan køre med !m <navn>. Skriv kommandoerne med ! og kæd dem sammen, "
+        "f.eks. !run cmd !wait 2 !send dir",
+    "Commands": "Kommandoer",
+    "Add macro": "Tilføj makro",
+    "Ignoring macros that need a one-word name and commands starting with !: {names}":
+        "Ignorerer makroer, der skal have et navn på ét ord og kommandoer, der starter med !: {names}",
+    "Live screen": "Live-skærm",
+    "The bot keeps one message in this channel updated with a fresh screenshot, so people can watch "
+    "without typing commands. Leave empty to turn it off.":
+        "Botten holder én besked i denne kanal opdateret med et nyt skærmbillede, så folk kan følge med "
+        "uden at skrive kommandoer. Lad den være tom for at slå det fra.",
+    "Update every": "Opdater hvert",
+    "Watchdog: start the VM again if it crashes or is shut down from inside":
+        "Vagthund: start VM'en igen, hvis den går ned eller bliver lukket indefra",
+    "Not when you power it off from this panel": "Ikke når du slukker den fra dette panel",
+
     # Updates
     "Check for updates": "Søg efter opdateringer",
     "Update to {version}": "Opdater til {version}",
