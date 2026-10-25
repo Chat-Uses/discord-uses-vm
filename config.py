@@ -64,6 +64,7 @@ class Config:
     revert_snapshot: str = ""  # empty = current snapshot
     auto_revert_minutes: int = 0  # 0 = off
     watchdog: bool = True  # start the VM again if it crashes or is shut down from inside
+    keyboard_layout: str = "us"  # keyboard layout set inside the VM (see keyboard_layouts.py)
 
     # Live screen: one message kept updated with a fresh screenshot
     live_channel_id: int = 0  # 0 = off

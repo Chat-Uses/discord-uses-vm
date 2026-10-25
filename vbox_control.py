@@ -8,6 +8,8 @@ import tempfile
 import time
 from pathlib import Path
 
+import keyboard_layouts
+
 # ---------------------------------------------------------------------------
 # Keyboard: PS/2 scancode set 1. (extended, make_code); break code = make | 0x80
 # ---------------------------------------------------------------------------
@@ -55,21 +57,47 @@ class VBoxError(Exception):
 def canonical_key(name: str) -> str:
     name = name.strip().lower()
     name = ALIASES.get(name, name)
-    if name not in KEYS:
+    # Single characters (a, ş, 7, ;) are looked up on the VM's keyboard layout when sent
+    if name not in KEYS and len(name) != 1:
         raise VBoxError(f"Unknown key `{name}`")
     return name
 
 
+def _split_combo(combo: str) -> list[str]:
+    # "+" alone is the plus key (e.g. on Danish/German keyboards), "ctrl++" is ctrl and plus
+    combo = combo.strip()
+    if combo == "+":
+        return ["+"]
+    keys = [canonical_key(k) for k in combo.split("+") if k.strip()]
+    if combo.endswith("++"):
+        keys.append("+")
+    return keys
+
+
 def normalize_combo(combo: str) -> str:
     """'Control+Alt+Del' -> 'alt+ctrl+delete', so blocked combos match in any order."""
-    return "+".join(sorted(canonical_key(k) for k in combo.split("+") if k.strip()))
+    return "+".join(sorted(_split_combo(combo)))
 
 
-def combo_scancodes(combo: str) -> list[str]:
-    """Press every key in order, then release them in reverse (e.g. ctrl+alt+del)."""
-    resolved = [KEYS[canonical_key(k)] for k in combo.split("+") if k.strip()]
-    if not resolved:
+def combo_scancodes(combo: str, layout: str = "us") -> list[str]:
+    """Press every key in order, then release them in reverse (e.g. ctrl+alt+del).
+    Character keys are found on the VM's keyboard layout, so ctrl+z presses the key
+    that is "z" there (on German that's the US "y" key)."""
+    keys = _split_combo(combo)
+    if not keys:
         raise VBoxError("No key given")
+    resolved = []
+    for key in keys:
+        if len(key) == 1:
+            code = keyboard_layouts.base_key(key, layout)
+            if code is None:
+                # A lone character that needs Shift/AltGr here (e.g. "!" or "@"): just type it
+                if len(keys) == 1 and keyboard_layouts.char_scancodes(key, layout):
+                    return keyboard_layouts.char_scancodes(key, layout)
+                raise VBoxError(f"`{key}` isn't a key on the {keyboard_layouts.layout_name(layout)} layout")
+            resolved.append((False, code))
+        else:
+            resolved.append(KEYS[key])
     codes = []
     for ext, code in resolved:
         codes += (["E0"] if ext else []) + [f"{code:02X}"]
@@ -223,11 +251,27 @@ class VBox:
             self.run("controlvm", self.vm, "screenshotpng", str(path))
             return path.read_bytes()
 
+    @property
+    def layout(self) -> str:
+        return getattr(self.config, "keyboard_layout", "us") or "us"
+
+    def put_scancodes(self, codes: list[str]) -> None:
+        # In chunks: keeps the command line short and lets the VM keep up with long text
+        for i in range(0, len(codes), 240):
+            if i:
+                time.sleep(0.03)
+            self.run("controlvm", self.vm, "keyboardputscancode", *codes[i:i + 240])
+
     def send_combo(self, combo: str, times: int = 1) -> None:
-        self.run("controlvm", self.vm, "keyboardputscancode", *(combo_scancodes(combo) * times))
+        self.put_scancodes(combo_scancodes(combo, self.layout) * times)
 
     def send_text(self, text: str) -> None:
-        self.run("controlvm", self.vm, "keyboardputstring", text)
+        """Type text using the VM's keyboard layout (not VirtualBox's built-in US mapping)."""
+        missing = keyboard_layouts.unsupported(text, self.layout)
+        if missing:
+            raise VBoxError(f"Can't type {' '.join(missing)} with the "
+                            f"{keyboard_layouts.layout_name(self.layout)} keyboard layout")
+        self.put_scancodes(keyboard_layouts.text_scancodes(text, self.layout))
 
     def mouse(self, events: list[tuple[int, int, int, int]]) -> None:
         """Send (x, y, wheel, buttons) events through the VirtualBox COM API.
