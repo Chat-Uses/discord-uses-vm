@@ -827,8 +827,8 @@ class MainWindow(QMainWindow):
         top.addWidget(self.chk_autorefresh)
         top.addWidget(self.chk_preview_control)
         top.addStretch()
-        top.addWidget(button("⟳  Refresh", lambda: self.refresh_preview(force=True), "icon"))
-        top.addWidget(button("⤓  Save image", self.save_screenshot, "icon"))
+        top.addWidget(button("Refresh", lambda: self.refresh_preview(force=True), "icon"))
+        top.addWidget(button("Save image", self.save_screenshot, "icon"))
         pv.addLayout(top)
         pv.addWidget(self.preview, 1)
 
@@ -842,7 +842,7 @@ class MainWindow(QMainWindow):
         trow.setSpacing(8)
         trow.addWidget(self.local_type, 3)
         trow.addWidget(button("Type", self.local_send_text))
-        trow.addWidget(button("Send ⏎", lambda: self.local_send_text(enter=True), "primary",
+        trow.addWidget(button("Send", lambda: self.local_send_text(enter=True), "primary",
                               tip="Type the text, then press Enter"))
         trow.addSpacing(8)
         trow.addWidget(self.local_key, 2)
@@ -852,9 +852,9 @@ class MainWindow(QMainWindow):
         qrow = QHBoxLayout()
         qrow.setSpacing(6)
         for label, combo in (("Win", "win"), ("Enter", "enter"), ("Esc", "esc"), ("Tab", "tab"),
-                             ("backspace"), ("Alt+Tab", "alt+tab"), ("Alt+F4", "alt+f4"),
-                             ("Ctrl+Alt+Del", "ctrl+alt+del"), ("up"), ("down"),
-                             ("left"), ("right")):
+                             ("Backspace", "backspace"), ("Alt+Tab", "alt+tab"), ("Alt+F4", "alt+f4"),
+                             ("Ctrl+Alt+Del", "ctrl+alt+del"), ("Up", "up"), ("Down", "down"),
+                             ("Left", "left"), ("Right", "right")):
             chip = button(label, lambda _=False, c=combo: self.send_combo(c), "chip", tip=combo)
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             qrow.addWidget(chip)
