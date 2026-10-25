@@ -1,0 +1,15 @@
+# Your settings, including the bot token. Never commit this.
+config.json
+
+# Generated at runtime
+logs/
+assets/
+__pycache__/
+*.pyc
+
+# Local tooling
+.claude/
+.venv/
+venv/
+dist/
+build/
