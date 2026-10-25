@@ -8,13 +8,14 @@ import io
 import json
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -63,15 +64,51 @@ def _check_host(url: str) -> None:
         raise UpdateError(f"Refusing to download from {host or url}")
 
 
+def _ssl_contexts():
+    """HTTPS certificate checks to try, best first.
+
+    1. Windows' own certificate check (truststore): trusts what the PC trusts, including
+       antivirus HTTPS scanning and root certificates Windows hasn't downloaded yet.
+    2. Python's default check plus the certifi certificate list.
+    """
+    try:
+        import truststore
+        yield truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except Exception:
+        pass
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+        ctx.load_verify_locations(certifi.where())
+    except Exception:
+        pass
+    yield ctx
+
+
+def _is_cert_error(e: Exception) -> bool:
+    return isinstance(getattr(e, "reason", e), ssl.SSLCertVerificationError)
+
+
 def _get(url: str, timeout: float = 20) -> bytes:
     _check_host(url)
     req = Request(url, headers={
         "User-Agent": f"discord-uses-vm/{__version__}",
         "Accept": "application/vnd.github+json" if "api.github.com" in url else "*/*",
     })
-    with urlopen(req, timeout=timeout) as resp:
-        _check_host(resp.geturl())  # after redirects
-        return resp.read()
+    last_error = None
+    for ctx in _ssl_contexts():
+        try:
+            with urlopen(req, timeout=timeout, context=ctx) as resp:
+                _check_host(resp.geturl())  # after redirects
+                return resp.read()
+        except (URLError, ssl.SSLError) as e:
+            if not _is_cert_error(e):
+                raise
+            last_error = e  # try the next certificate check
+    raise UpdateError(
+        "GitHub's security certificate couldn't be verified. Antivirus HTTPS scanning or a "
+        f"network proxy can cause this. ({getattr(last_error, 'reason', last_error)})"
+    )
 
 
 def latest_release() -> Release | None:

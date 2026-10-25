@@ -2,3 +2,5 @@ discord.py>=2.3
 PyQt6>=6.5
 Pillow>=10.0
 pywin32>=306
+truststore>=0.9
+certifi>=2024.2.2
