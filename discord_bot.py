@@ -13,7 +13,8 @@ import discord
 from discord.ext import commands
 
 from config import MOD_COMMANDS, STATS_PATH, VOTE_COMMANDS, Config
-from vbox_control import ALIASES, KEYS, VBox, VBoxError, add_grid, normalize_combo
+import keyboard_layouts
+from vbox_control import ALIASES, KEYS, VBox, VBoxError, add_grid, combo_scancodes, normalize_combo
 
 
 class Events:
@@ -683,6 +684,10 @@ class VMCog(commands.Cog):
                     pass
             if normalized in blocked:
                 raise Denied(f"🚫 `{combo}` is blocked.")
+        try:
+            combo_scancodes(combo, self.cfg.keyboard_layout)  # does it exist on the VM's layout?
+        except VBoxError as e:
+            raise commands.BadArgument(str(e))
         times = self._int(times_arg, "times") if times_arg else 1
         times = max(1, min(times, self.cfg.max_repeat))
         label = f"⌨️ `{combo}`" + (f" ×{times}" if times > 1 else "")
@@ -691,6 +696,12 @@ class VMCog(commands.Cog):
     def _check_text(self, ctx, text: str) -> None:
         if len(text) > self.cfg.max_type_len:
             raise commands.BadArgument(f"Max {self.cfg.max_type_len} characters.")
+        missing = keyboard_layouts.unsupported(text, self.cfg.keyboard_layout)
+        if missing:
+            shown = " ".join(f"`{c}`" for c in missing[:10])
+            raise commands.BadArgument(
+                f"Can't type {shown} on the VM's keyboard "
+                f"({keyboard_layouts.layout_name(self.cfg.keyboard_layout)}).")
         if not self.bot.is_mod(ctx.author):
             lowered = text.lower()
             if any(w.lower() in lowered for w in self.cfg.blocked_words if w.strip()):
@@ -967,9 +978,11 @@ class VMCog(commands.Cog):
     @commands.command()
     async def keys(self, ctx):
         """List key names"""
-        names = sorted(KEYS, key=lambda k: (len(k) > 1, k))
+        names = sorted(k for k in KEYS if len(k) > 1)
+        layout = keyboard_layouts.layout_name(self.cfg.keyboard_layout)
         await ctx.reply(
             "**Keys:** " + " ".join(f"`{n}`" for n in names)
+            + f"\nPlus any letter, number or symbol on the VM's keyboard (**{layout}**), e.g. `{self.cfg.prefix}key a`"
             + "\n**Aliases:** " + ", ".join(f"`{a}`→`{t}`" for a, t in ALIASES.items())
             + f"\nPress keys together with `{self.cfg.prefix}combo`, e.g. `{self.cfg.prefix}combo ctrl+shift+esc`",
             mention_author=False,
@@ -990,6 +1003,7 @@ class VMCog(commands.Cog):
         embed.add_field(name="Memory", value=f"{info.get('memory', '?')} MB")
         embed.add_field(name="CPUs", value=info.get("cpus", "?"))
         embed.add_field(name="Locked", value="🔒 yes" if self.cfg.lockdown else "no")
+        embed.add_field(name="Keyboard", value=keyboard_layouts.layout_name(self.cfg.keyboard_layout))
         embed.add_field(name="Bot uptime", value=fmt_duration(time.time() - self.bot.started_at))
         if self.cfg.auto_revert_minutes > 0:
             left = self.cfg.auto_revert_minutes * 60 - (time.monotonic() - self.bot.last_revert)

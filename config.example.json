@@ -20,6 +20,7 @@
   "revert_snapshot": "",
   "auto_revert_minutes": 0,
   "watchdog": true,
+  "keyboard_layout": "us",
   "live_channel_id": 0,
   "live_interval": 30,
   "live_message_id": 0,

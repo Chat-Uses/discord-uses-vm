@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget, QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget,
 )
 
+import keyboard_layouts
 import updater
 from config import ALL_COMMANDS, LOG_CATEGORIES, MOD_COMMANDS, VOTE_COMMANDS, Config
 from discord_bot import Events, VMBot
@@ -1055,6 +1056,27 @@ class MainWindow(QMainWindow):
         f.addRow("", self.chk_watchdog)
         v.addWidget(vb)
 
+        kb = QGroupBox("Keyboard")
+        kf = form(kb)
+        kf.addRow(hint("Pick the keyboard layout that is set inside the VM (in its Windows settings), "
+                       "so typed text and keys come out right, e.g. ş ğ ı on Turkish or æ ø å on Danish."))
+        self.layout_combo = QComboBox()
+        self.layout_combo.setProperty("i18n", True)
+        for layout_id, name in keyboard_layouts.LAYOUT_NAMES.items():
+            self.layout_combo.addItem(name, layout_id)
+        self.layout_combo.currentIndexChanged.connect(self.on_layout_changed)
+        self.layout_combo.setMaximumWidth(320)
+        kf.addRow("VM keyboard layout", self.layout_combo)
+        self.layout_test_edit = QLineEdit("Hello, World! @#$%&/()=?+*<> ğüşıöç İ æøå é 123")
+        trow = QHBoxLayout()
+        trow.setSpacing(8)
+        trow.addWidget(self.layout_test_edit, 1)
+        trow.addWidget(button("⌨  Test typing", self.test_layout, "primary",
+                              tip="Open Notepad in the VM first, then press this"))
+        kf.addRow("Test", trow)
+        kf.addRow("", hint("Open Notepad in the VM, press Test typing, and check the text matches."))
+        v.addWidget(kb)
+
         power = QGroupBox("Power")
         pg = QHBoxLayout(power)
         pg.setSpacing(8)
@@ -1402,6 +1424,9 @@ class MainWindow(QMainWindow):
         self.vote_timeout_spin.setValue(c.vote_timeout)
         self.vote_cooldown_spin.setValue(c.vote_cooldown)
         self.chk_watchdog.setChecked(c.watchdog)
+        self.layout_combo.blockSignals(True)
+        self.layout_combo.setCurrentIndex(max(0, self.layout_combo.findData(c.keyboard_layout)))
+        self.layout_combo.blockSignals(False)
         self.live_channel_edit.setText(str(c.live_channel_id) if c.live_channel_id else "")
         self.live_interval_spin.setValue(c.live_interval)
         self.macro_table.setRowCount(0)
@@ -1487,6 +1512,7 @@ class MainWindow(QMainWindow):
         c.vote_timeout = self.vote_timeout_spin.value()
         c.vote_cooldown = self.vote_cooldown_spin.value()
         c.watchdog = self.chk_watchdog.isChecked()
+        c.keyboard_layout = self.layout_combo.currentData() or "us"
         new_live = int(self.live_channel_edit.text() or 0)
         if new_live != c.live_channel_id:
             c.live_message_id = 0  # new channel: post a fresh message there
@@ -2031,6 +2057,25 @@ class MainWindow(QMainWindow):
         self.run_task(getattr(self.vbox, method),
                       done=lambda _: (self.log("ok", T(message)), self.poll_vm_state(), self.discord_log(message),
                                       QTimer.singleShot(1000, lambda: self.refresh_preview(force=True))))
+
+    def on_layout_changed(self, index: int):
+        # Applies right away, also to a running bot (it reads the same settings)
+        self.config.keyboard_layout = self.layout_combo.itemData(index) or "us"
+        self.config.save()
+        self.log("info", T("VM keyboard layout: {name}").format(
+            name=T(keyboard_layouts.layout_name(self.config.keyboard_layout))))
+
+    def test_layout(self):
+        text = self.layout_test_edit.text()
+        missing = keyboard_layouts.unsupported(text, self.config.keyboard_layout)
+        typeable = "".join(ch for ch in text if ch not in missing)
+        if not typeable:
+            return
+        if missing:
+            self.log("warn", T("Skipped characters this layout can't type: {chars}").format(chars=" ".join(missing)))
+        self.run_task(self.vbox.send_text, typeable, done=lambda _: (
+            self.log("ok", T("Typed the test text. Check it matches in the VM.")),
+            QTimer.singleShot(500, lambda: self.refresh_preview(force=True))))
 
     def hold_watchdog(self):
         """The VM is being powered off on purpose: the bot's watchdog shouldn't start it again."""

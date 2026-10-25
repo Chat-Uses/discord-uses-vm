@@ -27,6 +27,8 @@ Chainable: key, combo, type, send, run, click, move, drag, scroll, wait, screen,
 
 **Watchdog:** if the VM crashes or someone shuts it down from inside (`!send shutdown /s`), the bot starts it again within about 30 seconds. Powering it off from the panel doesn't trigger it. Toggle it on the Virtual Machine page.
 
+**Keyboard layout:** on the Virtual Machine page, pick the layout that's set *inside* the VM (US, UK, Danish, German, French AZERTY, Turkish Q or Turkish F). Typed text and keys are then pressed on the right physical keys, so `ş ğ ı`, `æ ø å`, AltGr symbols like `@` and accents like `é` come out correctly, and shortcuts like `!combo ctrl+z` hit the key labelled Z on that layout. Text the layout can't type is refused before anything is sent. Use **Test typing** with Notepad open in the VM to check.
+
 **Stats:** the `!stats` leaderboard is saved in `stats.json`, so it survives restarts and updates.
 
 **Voting:** anyone can type `!revert` or `!reboot` to start or join a vote. It passes once 50% of the people who chatted in the command channels in the last 10 minutes have voted (rounded up, so 4 active people need 2 votes). Votes expire after 2 minutes, and there's a 1-minute wait after a revert/reboot before a new vote can start. All of these are adjustable on the Commands page. `!vminfo` shows the active count and current votes.

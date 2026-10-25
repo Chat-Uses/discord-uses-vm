@@ -329,6 +329,29 @@ DA = {
         "Vagthund: start VM'en igen, hvis den går ned eller bliver lukket indefra",
     "Not when you power it off from this panel": "Ikke når du slukker den fra dette panel",
 
+    # Keyboard layouts (v1.2)
+    "Keyboard": "Tastatur",
+    "Pick the keyboard layout that is set inside the VM (in its Windows settings), so typed text and "
+    "keys come out right, e.g. ş ğ ı on Turkish or æ ø å on Danish.":
+        "Vælg det tastaturlayout, der er sat inde i VM'en (i dens Windows-indstillinger), så tekst og "
+        "taster bliver rigtige, f.eks. ş ğ ı på tyrkisk eller æ ø å på dansk.",
+    "VM keyboard layout": "VM'ens tastaturlayout",
+    "Test": "Test",
+    "Test typing": "Test skrivning",
+    "Open Notepad in the VM first, then press this": "Åbn Notesblok i VM'en først, og tryk så her",
+    "Open Notepad in the VM, press Test typing, and check the text matches.":
+        "Åbn Notesblok i VM'en, tryk på Test skrivning, og tjek at teksten passer.",
+    "VM keyboard layout: {name}": "VM'ens tastaturlayout: {name}",
+    "Skipped characters this layout can't type: {chars}": "Sprang tegn over, som layoutet ikke kan skrive: {chars}",
+    "Typed the test text. Check it matches in the VM.": "Testteksten er skrevet. Tjek at den passer i VM'en.",
+    "English (US)": "Engelsk (USA)",
+    "English (UK)": "Engelsk (UK)",
+    "Danish": "Dansk",
+    "German": "Tysk",
+    "French (AZERTY)": "Fransk (AZERTY)",
+    "Turkish Q": "Tyrkisk Q",
+    "Turkish F": "Tyrkisk F",
+
     # Updates
     "Check for updates": "Søg efter opdateringer",
     "Update to {version}": "Opdater til {version}",
