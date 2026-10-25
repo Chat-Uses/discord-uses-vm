@@ -41,5 +41,7 @@
   "lockdown": false,
   "preview_interval": 2.0,
   "dark_theme": true,
-  "language": "en"
+  "language": "en",
+  "auto_check_updates": true,
+  "skipped_version": ""
 }

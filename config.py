@@ -85,6 +85,10 @@ class Config:
     dark_theme: bool = True
     language: str = "en"  # control panel language: en | da
 
+    # Updates
+    auto_check_updates: bool = True
+    skipped_version: str = ""
+
     @classmethod
     def load(cls, path: Path = CONFIG_PATH) -> "Config":
         cfg = cls()

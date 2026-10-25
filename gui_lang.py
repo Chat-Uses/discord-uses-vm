@@ -308,6 +308,31 @@ DA = {
     "VM reset": "VM genstartet",
     "VM powered off": "VM slukket",
     "Language: {name}": "Sprog: {name}",
+
+    # Updates
+    "Check for updates": "Søg efter opdateringer",
+    "Update to {version}": "Opdater til {version}",
+    "Update available": "Opdatering tilgængelig",
+    "Update available: {version}": "Opdatering tilgængelig: {version}",
+    "Version {new} is available. You have {current}.": "Version {new} er tilgængelig. Du har {current}.",
+    "What's new": "Nyheder",
+    "Your settings are kept. The panel restarts after updating, and if the bot is running it "
+    "starts again by itself.":
+        "Dine indstillinger bevares. Panelet genstarter efter opdateringen, og hvis botten kører, "
+        "starter den selv igen.",
+    "Check for updates automatically": "Søg automatisk efter opdateringer",
+    "Skip this version": "Spring denne version over",
+    "Later": "Senere",
+    "Update now": "Opdater nu",
+    "You have the latest version ({version}).": "Du har den nyeste version ({version}).",
+    "Couldn't check for updates:\n{error}": "Kunne ikke søge efter opdateringer:\n{error}",
+    "Downloading and installing {version}…": "Henter og installerer {version}…",
+    "Updated to {version}: {n} files, backup in {backup}": "Opdateret til {version}: {n} filer, backup i {backup}",
+    "Updated, but installing new Python packages failed:\n{error}\n\nRun: pip install -r requirements.txt":
+        "Opdateret, men installation af nye Python-pakker mislykkedes:\n{error}\n\n"
+        "Kør: pip install -r requirements.txt",
+    "Updated to {version}. The panel will now restart.": "Opdateret til {version}. Panelet genstarter nu.",
+    "Update failed:\n{error}": "Opdateringen mislykkedes:\n{error}",
 }
 
 TRANSLATIONS = {"da": DA}

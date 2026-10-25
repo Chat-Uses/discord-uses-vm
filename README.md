@@ -64,6 +64,21 @@ Sidebar: start/stop the bot, save (Ctrl+S), **Lockdown** (only mods can use comm
 
 **Log channel** (Discord page): pick a channel from the list (or paste its ID) and press **Send test message**. Toggle what gets posted: commands, blocked attempts, mod actions, bot online/offline, VM events (auto revert and power/snapshot actions from the panel) and announcements. You can also log only failed commands and attach screenshots. Blocked attempts are logged at most once per user every 30 seconds, so spammers can't flood the channel.
 
+## Updates
+
+The panel checks GitHub for a new release when it starts and every 6 hours (switch this off in the update window). When one is out, an **Update to vX** button appears in the sidebar and a window shows what's new. **Update now** downloads the release from GitHub, replaces the program files, installs new Python packages if needed, and restarts the panel. If the bot was running, it starts again by itself.
+
+- `config.json`, `logs/` and `assets/` are never touched.
+- The old files are copied to `backup/v<old version>/` first.
+- Downloads only come from GitHub, and are checked against GitHub's checksum.
+- **Check for updates** under the version number in the sidebar checks right away.
+
+### Publishing a release (maintainers)
+
+1. Bump `__version__` in `version.py` (e.g. `1.1.0`) and commit.
+2. Tag it `v1.1.0` and push the tag.
+3. Create a GitHub release for the tag, with a `.zip` of the program attached (`git archive --format=zip -o discord-uses-vm-v1.1.0.zip v1.1.0`).
+
 ## Notes
 
 - Commands run one at a time, so every screenshot matches its command.

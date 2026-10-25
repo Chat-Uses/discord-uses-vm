@@ -12,25 +12,27 @@ from string import Template
 
 import discord
 from PyQt6.QtCore import (
-    QEasingCurve, QObject, QPropertyAnimation, QRectF, QRegularExpression, QRunnable, QThread,
-    QThreadPool, QTimer, QUrl, Qt, pyqtProperty, pyqtSignal,
+    QEasingCurve, QObject, QProcess, QPropertyAnimation, QRectF, QRegularExpression, QRunnable,
+    QThread, QThreadPool, QTimer, QUrl, Qt, pyqtProperty, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QAction, QColor, QDesktopServices, QFont, QKeySequence, QPainter, QPalette, QPixmap,
     QRegularExpressionValidator,
 )
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox,
+    QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDoubleSpinBox,
     QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView,
     QInputDialog, QLabel, QLineEdit, QListWidget, QMainWindow, QMenu, QMessageBox,
-    QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QSplitter, QStackedWidget,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QPlainTextEdit, QProgressDialog, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QSplitter,
+    QStackedWidget, QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget,
 )
 
+import updater
 from config import ALL_COMMANDS, LOG_CATEGORIES, MOD_COMMANDS, VOTE_COMMANDS, Config
 from discord_bot import Events, VMBot
 from gui_lang import LANGUAGES, T, set_language, translate_tree
 from vbox_control import VBox, VBoxError, normalize_combo
+from version import __version__
 
 APP_NAME = "Discord Uses VM"
 LOG_DIR = Path(__file__).with_name("logs")
@@ -109,6 +111,9 @@ QPushButton#danger:hover { background: $danger; color: white; }
 QPushButton#primary:disabled, QPushButton#danger:disabled {
     background: $surface2; border: 1px solid $border; color: $muted; }
 QPushButton#chip { padding: 4px 11px; border-radius: 13px; font-size: 9pt; }
+QPushButton#link { background: transparent; border: none; padding: 0; color: $accent;
+                   font-size: 8.5pt; text-align: left; }
+QPushButton#link:hover { text-decoration: underline; background: transparent; }
 QPushButton#chip:hover { border-color: $accent; }
 QPushButton#icon { padding: 6px 10px; }
 
@@ -492,6 +497,51 @@ class ListEditor(QWidget):
         self.list.addItems(str(v) for v in values)
 
 
+class UpdateDialog(QDialog):
+    """Shows what's new in a release and asks whether to install it."""
+
+    def __init__(self, parent, release, config: Config):
+        super().__init__(parent)
+        self.config = config
+        self.choice = "later"
+        self.setWindowTitle(T("Update available"))
+        self.setMinimumSize(520, 420)
+        v = QVBoxLayout(self)
+        v.setContentsMargins(22, 20, 22, 18)
+        v.setSpacing(12)
+        title = QLabel(T("Update available"))
+        title.setObjectName("pageTitle")
+        v.addWidget(title)
+        v.addWidget(hint(T("Version {new} is available. You have {current}.")
+                         .format(new=release.tag, current=f"v{__version__}")))
+        notes = QTextBrowser()
+        notes.setOpenExternalLinks(True)
+        notes.setMarkdown(release.notes or "-")
+        v.addWidget(QLabel("<b>" + html.escape(T("What's new")) + "</b>"))
+        v.addWidget(notes, 1)
+        v.addWidget(hint(T("Your settings are kept. The panel restarts after updating, "
+                           "and if the bot is running it starts again by itself.")))
+        self.auto = Toggle(T("Check for updates automatically"))
+        self.auto.setChecked(config.auto_check_updates)
+        self.auto.toggled.connect(lambda on: setattr(config, "auto_check_updates", on))
+        v.addWidget(self.auto)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(button(T("Skip this version"), lambda: self._done("skip")))
+        row.addStretch()
+        row.addWidget(button(T("Later"), lambda: self._done("later")))
+        row.addWidget(button("⬆  " + T("Update now"), lambda: self._done("update"), "primary"))
+        v.addLayout(row)
+
+    def _done(self, choice: str):
+        self.choice = choice
+        self.accept()
+
+    def exec_choice(self) -> str:
+        self.exec()
+        return self.choice
+
+
 def button(text: str, slot, kind: str = "", tip: str = "") -> QPushButton:
     b = QPushButton(text)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -598,6 +648,8 @@ class MainWindow(QMainWindow):
         self.usage: Counter[str] = Counter()
         self.total_commands = 0
         self.last_channels: list = []
+        self.available_update: updater.Release | None = None
+        self.update_prompted: set[str] = set()  # versions already offered this session
 
         self.signals = BotSignals()
         self.signals.log.connect(self.log)
@@ -647,9 +699,12 @@ class MainWindow(QMainWindow):
         QTimer(self, timeout=self.tick, interval=1000).start()
 
         translate_tree(self)
-        self.log("info", T("{app} started").format(app=APP_NAME))
+        self.log("info", T("{app} started").format(app=APP_NAME) + f" (v{__version__})")
         self.check_vboxmanage()
         self.refresh_vms()
+        # Look for updates shortly after start, then every 6 hours
+        QTimer.singleShot(4000, lambda: self.check_updates(manual=False))
+        QTimer(self, timeout=lambda: self.check_updates(manual=False), interval=6 * 3600 * 1000).start()
 
     # --- sidebar --------------------------------------------------------------
 
@@ -667,6 +722,14 @@ class MainWindow(QMainWindow):
         sub.setObjectName("brandSub")
         v.addWidget(brand)
         v.addWidget(sub)
+        vrow = QHBoxLayout()
+        vrow.setSpacing(8)
+        version = QLabel(f"v{__version__}")
+        version.setObjectName("brandSub")
+        vrow.addWidget(version)
+        vrow.addWidget(button("Check for updates", lambda: self.check_updates(manual=True), "link"))
+        vrow.addStretch()
+        v.addLayout(vrow)
         v.addSpacing(18)
         section = QLabel("MENU")
         section.setObjectName("navSection")
@@ -685,6 +748,10 @@ class MainWindow(QMainWindow):
         self.nav.idClicked.connect(self.go)
         v.addStretch()
 
+        self.update_btn = button("", lambda: self.show_update_dialog(self.available_update), "primary")
+        self.update_btn.hide()
+        v.addWidget(self.update_btn)
+        v.addSpacing(6)
         self.sidebar_status = QLabel()
         self.sidebar_status.setObjectName("statusPill")
         v.addWidget(self.sidebar_status)
@@ -1950,6 +2017,87 @@ class MainWindow(QMainWindow):
 
     # --- misc -----------------------------------------------------------------
 
+    # --- updates ------------------------------------------------------------------
+
+    def check_updates(self, manual: bool):
+        if not manual and not self.config.auto_check_updates:
+            return
+
+        def done(release):
+            if release is None:
+                self.update_btn.hide()
+                if manual:
+                    QMessageBox.information(self, APP_NAME, T("You have the latest version ({version}).")
+                                            .format(version=f"v{__version__}"))
+                return
+            self.available_update = release
+            self.update_btn.setText("⬆  " + T("Update to {version}").format(version=release.tag))
+            self.update_btn.show()
+            self.log("info", T("Update available: {version}").format(version=release.tag))
+            # Pop up once per version per session, unless the user skipped that version
+            if manual or (release.version != self.config.skipped_version
+                          and release.version not in self.update_prompted):
+                self.update_prompted.add(release.version)
+                self.show_update_dialog(release)
+
+        def error(message):
+            self.log("warn", T("Couldn't check for updates:\n{error}").format(error=message).replace("\n", " "))
+            if manual:
+                QMessageBox.warning(self, APP_NAME, T("Couldn't check for updates:\n{error}").format(error=message))
+
+        self.run_task(updater.newer_release, done=done, error=error, quiet=True)
+
+    def show_update_dialog(self, release):
+        if release is None:
+            return
+        dialog = UpdateDialog(self, release, self.config)
+        choice = dialog.exec_choice()
+        self.config.save()  # the "check automatically" switch
+        if choice == "update":
+            self.install_update(release)
+        elif choice == "skip":
+            self.config.skipped_version = release.version
+            self.config.save()
+            self.update_btn.hide()
+
+    def install_update(self, release):
+        was_running = self.bot_running
+        progress = QProgressDialog(T("Downloading and installing {version}…").format(version=release.tag),
+                                   "", 0, 0, self)
+        progress.setWindowTitle(APP_NAME)
+        progress.setCancelButton(None)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.show()
+        self.log("info", T("Downloading and installing {version}…").format(version=release.tag))
+
+        def done(report):
+            progress.close()
+            self.log("ok", T("Updated to {version}: {n} files, backup in {backup}")
+                     .format(version=release.tag, n=report["files"], backup=report["backup"]))
+            if report["deps"].startswith("failed"):
+                QMessageBox.warning(self, APP_NAME, T("Updated, but installing new Python packages failed:\n{error}\n\n"
+                                                      "Run: pip install -r requirements.txt")
+                                    .format(error=report["deps"]))
+            QMessageBox.information(self, APP_NAME, T("Updated to {version}. The panel will now restart.")
+                                    .format(version=release.tag))
+            self.restart_panel(start_bot=was_running)
+
+        def error(message):
+            progress.close()
+            self.log("error", T("Update failed:\n{error}").format(error=message).replace("\n", " "))
+            QMessageBox.critical(self, APP_NAME, T("Update failed:\n{error}").format(error=message))
+
+        self.run_task(updater.install, release, done=done, error=error, quiet=True)
+
+    def restart_panel(self, start_bot: bool):
+        """Start a fresh copy of the panel (running the new code) and close this one."""
+        self.collect()
+        self.config.save()
+        args = [str(Path(__file__).resolve())] + (["--start-bot"] if start_bot else [])
+        QProcess.startDetached(sys.executable, args, str(Path(__file__).resolve().parent))
+        self.close()
+
     def tick(self):
         if self.bot_started and self.bot_status == "online":
             secs = int((datetime.now() - self.bot_started).total_seconds())
@@ -1988,6 +2136,10 @@ def main():
     apply_theme(app, config.dark_theme)
     window = MainWindow(config)
     window.show()
+    if "--start-bot" in sys.argv:
+        # Restarted after an update while the bot was running: start it again once the
+        # old panel has had time to disconnect
+        QTimer.singleShot(6000, window.start_bot)
     sys.exit(app.exec())
 
 

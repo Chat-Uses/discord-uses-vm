@@ -4,6 +4,7 @@ config.json
 # Generated at runtime
 logs/
 assets/
+backup/
 __pycache__/
 *.pyc
 
