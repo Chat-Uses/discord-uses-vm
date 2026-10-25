@@ -971,7 +971,7 @@ class MainWindow(QMainWindow):
         lf.addRow("Channel", crow)
         trow = QHBoxLayout()
         trow.setSpacing(8)
-        trow.addWidget(button('Send test message", self.send_test_log, "primary"))
+        trow.addWidget(button("Send test message", self.send_test_log, "primary"))
         trow.addWidget(button("Clear", lambda: self.log_channel_edit.clear()))
         trow.addStretch()
         lf.addRow("", trow)
