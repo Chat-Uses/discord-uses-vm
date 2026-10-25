@@ -629,8 +629,8 @@ def vbox_layout(widget: QWidget, spacing: int = 16) -> QVBoxLayout:
 # ---------------------------------------------------------------------------
 
 NAV = [
-    ("🖥️", "Dashboard"), ("💬", "Discord"), ("📦", "Virtual Machine"), ("⌨️", "Commands"),
-    ("🛡️", "Moderation"), ("📊", "Activity"), ("📜", "Logs"),
+    (" ", "Dashboard"), (" ", "Discord"), (" ", "Virtual Machine"), (" ", "Commands"),
+    (" ", "Moderation"), (" ", "Activity"), (" ", "Logs"),
 ]
 
 
@@ -717,7 +717,7 @@ class MainWindow(QMainWindow):
         v.setContentsMargins(14, 20, 14, 16)
         v.setSpacing(4)
 
-        brand = QLabel("🖥️ Uses VM")
+        brand = QLabel("Uses VM")
         brand.setObjectName("brand")
         sub = QLabel("Discord control panel")
         sub.setObjectName("brandSub")
@@ -784,7 +784,7 @@ class MainWindow(QMainWindow):
         lrow.addWidget(self.lang_combo, 1)
         v.addLayout(lrow)
         v.addSpacing(8)
-        v.addWidget(button("💾  Save settings", self.save_settings, tip="Ctrl+S"))
+        v.addWidget(button("Save settings", self.save_settings, tip="Ctrl+S"))
         return side
 
     def go(self, index: int):
@@ -827,8 +827,8 @@ class MainWindow(QMainWindow):
         top.addWidget(self.chk_autorefresh)
         top.addWidget(self.chk_preview_control)
         top.addStretch()
-        top.addWidget(button("⟳  Refresh", lambda: self.refresh_preview(force=True), "icon"))
-        top.addWidget(button("⤓  Save image", self.save_screenshot, "icon"))
+        top.addWidget(button("Refresh", lambda: self.refresh_preview(force=True), "icon"))
+        top.addWidget(button("Save image", self.save_screenshot, "icon"))
         pv.addLayout(top)
         pv.addWidget(self.preview, 1)
 
@@ -842,7 +842,7 @@ class MainWindow(QMainWindow):
         trow.setSpacing(8)
         trow.addWidget(self.local_type, 3)
         trow.addWidget(button("Type", self.local_send_text))
-        trow.addWidget(button("Send ⏎", lambda: self.local_send_text(enter=True), "primary",
+        trow.addWidget(button("Send", lambda: self.local_send_text(enter=True), "primary",
                               tip="Type the text, then press Enter"))
         trow.addSpacing(8)
         trow.addWidget(self.local_key, 2)
@@ -852,9 +852,9 @@ class MainWindow(QMainWindow):
         qrow = QHBoxLayout()
         qrow.setSpacing(6)
         for label, combo in (("Win", "win"), ("Enter", "enter"), ("Esc", "esc"), ("Tab", "tab"),
-                             ("⌫", "backspace"), ("Alt+Tab", "alt+tab"), ("Alt+F4", "alt+f4"),
-                             ("Ctrl+Alt+Del", "ctrl+alt+del"), ("↑", "up"), ("↓", "down"),
-                             ("←", "left"), ("→", "right")):
+                             ("Backspace", "backspace"), ("Alt+Tab", "alt+tab"), ("Alt+F4", "alt+f4"),
+                             ("Ctrl+Alt+Del", "ctrl+alt+del"), ("Up", "up"), ("Down", "down"),
+                             ("Left", "left"), ("Right", "right")):
             chip = button(label, lambda _=False, c=combo: self.send_combo(c), "chip", tip=combo)
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             qrow.addWidget(chip)
@@ -865,13 +865,13 @@ class MainWindow(QMainWindow):
         vm_box = QGroupBox("Quick actions")
         vg = QGridLayout(vm_box)
         vg.setSpacing(8)
-        vg.addWidget(button("▶  Start", self.vm_start), 0, 0)
-        vg.addWidget(button("⏻  Shut down", lambda: self.vm_action("acpi_shutdown", "ACPI shutdown sent")), 0, 1)
-        vg.addWidget(button("⏸  Pause", lambda: self.vm_action("pause", "VM paused")), 1, 0)
-        vg.addWidget(button("⏯  Resume", lambda: self.vm_action("resume", "VM resumed")), 1, 1)
-        vg.addWidget(button("⟲  Reset", lambda: self.vm_action("reset", "VM reset", confirm="Hard reset the VM?")), 2, 0)
-        vg.addWidget(button("⏹  Power off", lambda: self.vm_action("poweroff", "VM powered off", confirm="Power off the VM?"), "danger"), 2, 1)
-        vg.addWidget(button("⏪  Revert to clean snapshot", self.vm_revert, "primary"), 3, 0, 1, 2)
+        vg.addWidget(button("Start", self.vm_start), 0, 0)
+        vg.addWidget(button("Shut down", lambda: self.vm_action("acpi_shutdown", "ACPI shutdown sent")), 0, 1)
+        vg.addWidget(button("Pause", lambda: self.vm_action("pause", "VM paused")), 1, 0)
+        vg.addWidget(button("Resume", lambda: self.vm_action("resume", "VM resumed")), 1, 1)
+        vg.addWidget(button("Reset", lambda: self.vm_action("reset", "VM reset", confirm="Hard reset the VM?")), 2, 0)
+        vg.addWidget(button("Power off", lambda: self.vm_action("poweroff", "VM powered off", confirm="Power off the VM?"), "danger"), 2, 1)
+        vg.addWidget(button("Revert to clean snapshot", self.vm_revert, "primary"), 3, 0, 1, 2)
 
         ann_box = QGroupBox("Announce")
         al = QVBoxLayout(ann_box)
@@ -888,7 +888,7 @@ class MainWindow(QMainWindow):
         self.announce_edit.setPlaceholderText("Write a message…")
         self.announce_edit.setMaximumHeight(90)
         al.addWidget(self.announce_edit)
-        al.addWidget(button("📢  Send", self.announce, "primary"))
+        al.addWidget(button("Send", self.announce, "primary"))
         self.on_channels([])
 
         right = QWidget()
@@ -930,7 +930,7 @@ class MainWindow(QMainWindow):
         f.addRow("Token", trow)
         brow = QHBoxLayout()
         brow.setSpacing(8)
-        brow.addWidget(button("🔗  Invite bot to server", self.open_invite, "primary"))
+        brow.addWidget(button("Invite bot to server", self.open_invite, "primary"))
         brow.addWidget(button("Developer Portal ↗", lambda: QDesktopServices.openUrl(
             QUrl("https://discord.com/developers/applications"))))
         brow.addStretch()
@@ -967,11 +967,11 @@ class MainWindow(QMainWindow):
         crow.setSpacing(8)
         crow.addWidget(self.log_channel_edit)
         crow.addWidget(self.log_channel_pick, 1)
-        crow.addWidget(button("⟳", self.refresh_channels, "icon", tip="Reload channel list"))
+        crow.addWidget(button("Reload", self.refresh_channels, "icon", tip="Reload channel list"))
         lf.addRow("Channel", crow)
         trow = QHBoxLayout()
         trow.setSpacing(8)
-        trow.addWidget(button("✉  Send test message", self.send_test_log, "primary"))
+        trow.addWidget(button("Send test message", self.send_test_log, "primary"))
         trow.addWidget(button("Clear", lambda: self.log_channel_edit.clear()))
         trow.addStretch()
         lf.addRow("", trow)
@@ -1080,12 +1080,12 @@ class MainWindow(QMainWindow):
         power = QGroupBox("Power")
         pg = QHBoxLayout(power)
         pg.setSpacing(8)
-        pg.addWidget(button("▶  Start", self.vm_start, "primary"))
-        pg.addWidget(button("⏻  ACPI shutdown", lambda: self.vm_action("acpi_shutdown", "ACPI shutdown sent")))
-        pg.addWidget(button("⟲  Reset", lambda: self.vm_action("reset", "VM reset", confirm="Hard reset the VM?")))
-        pg.addWidget(button("⏸  Pause", lambda: self.vm_action("pause", "VM paused")))
-        pg.addWidget(button("⏯  Resume", lambda: self.vm_action("resume", "VM resumed")))
-        pg.addWidget(button("⏹  Power off", lambda: self.vm_action("poweroff", "VM powered off", confirm="Power off the VM?"), "danger"))
+        pg.addWidget(button("Start", self.vm_start, "primary"))
+        pg.addWidget(button("ACPI shutdown", lambda: self.vm_action("acpi_shutdown", "ACPI shutdown sent")))
+        pg.addWidget(button("Reset", lambda: self.vm_action("reset", "VM reset", confirm="Hard reset the VM?")))
+        pg.addWidget(button("Pause", lambda: self.vm_action("pause", "VM paused")))
+        pg.addWidget(button("Resume", lambda: self.vm_action("resume", "VM resumed")))
+        pg.addWidget(button("Power off", lambda: self.vm_action("poweroff", "VM powered off", confirm="Power off the VM?"), "danger"))
         v.addWidget(power)
 
         snaps = QGroupBox("Snapshots")
@@ -1097,9 +1097,9 @@ class MainWindow(QMainWindow):
         sv.addWidget(self.snap_list)
         srow = QHBoxLayout()
         srow.setSpacing(8)
-        srow.addWidget(button("📸  Take snapshot", self.take_snapshot, "primary"))
-        srow.addWidget(button("⏪  Restore selected", self.restore_selected_snapshot))
-        srow.addWidget(button("⟳  Refresh", self.refresh_snapshots))
+        srow.addWidget(button("Take snapshot", self.take_snapshot, "primary"))
+        srow.addWidget(button("Restore selected", self.restore_selected_snapshot))
+        srow.addWidget(button("Refresh", self.refresh_snapshots))
         srow.addStretch()
         sv.addLayout(srow)
         sf = QFormLayout()
@@ -1126,10 +1126,10 @@ class MainWindow(QMainWindow):
         iv.addWidget(self.vm_info_text)
         irow = QHBoxLayout()
         irow.addWidget(hint(
-            "🔐 Strangers control this VM: disable its network adapter, shared folders, shared "
+            "Strangers control this VM: disable its network adapter, shared folders, shared "
             "clipboard and drag-and-drop, and set Pointing Device to <b>USB Tablet</b>."
         ), 1)
-        irow.addWidget(button("⟳  Refresh details", self.refresh_vm_info))
+        irow.addWidget(button("Refresh details", self.refresh_vm_info))
         iv.addLayout(irow)
         v.addWidget(info)
         v.addStretch()
@@ -1207,7 +1207,7 @@ class MainWindow(QMainWindow):
         row.addWidget(ss, 1)
         v.addLayout(row)
 
-        votes = QGroupBox("Votes for !revert and !reboot")
+        votes = QGroupBox("Votes for revert and reboot")
         vf = form(votes)
         vf.addRow(hint("Anyone can start a vote. It passes when enough of the people active in the "
                        "command channels agree. Mods skip the vote and it happens instantly."))
@@ -1283,7 +1283,7 @@ class MainWindow(QMainWindow):
         bl.setSpacing(10)
         self.bans_editor = ListEditor("User ID", numeric=True)
         bl.addWidget(self.bans_editor)
-        bl.addWidget(hint("Banned users are silently ignored. Mods can also use !ban / !unban."))
+        bl.addWidget(hint("Banned users are ignored. Mods can also use !ban / !unban."))
         g.addWidget(bans, 0, 1)
 
         keys = QGroupBox("Blocked key combos")
@@ -1293,7 +1293,7 @@ class MainWindow(QMainWindow):
         kl.addWidget(self.blocked_keys_editor)
         g.addWidget(keys, 1, 0)
 
-        words = QGroupBox("Blocked words for !type")
+        words = QGroupBox("Blocked words for type command")
         wl = QVBoxLayout(words)
         wl.setSpacing(10)
         self.blocked_words_editor = ListEditor("Word or phrase")
@@ -1364,7 +1364,7 @@ class MainWindow(QMainWindow):
         self.log_filter.currentIndexChanged.connect(self.rerender_logs)
         row.addWidget(self.log_filter)
         self.log_search = QLineEdit()
-        self.log_search.setPlaceholderText("🔍  Search logs…")
+        self.log_search.setPlaceholderText("Search logs…")
         self.log_search.textChanged.connect(self.rerender_logs)
         row.addWidget(self.log_search, 1)
         self.chk_log_file = Toggle("Save to logs/ folder")
@@ -1615,7 +1615,7 @@ class MainWindow(QMainWindow):
         return f"{self.config.prefix}{name}{tag}"
 
     def update_lock_label(self):
-        self.lbl_lock.setText("🔒 " + T("On") if self.config.lockdown else "🔓 " + T("Off"))
+        self.lbl_lock.setText(T("On") if self.config.lockdown else T("Off"))
 
     def set_ui_language(self, index: int):
         code = self.lang_combo.itemData(index)
@@ -1644,8 +1644,8 @@ class MainWindow(QMainWindow):
         self.config.save()
         self.update_lock_label()
         self.log("warn" if on else "info",
-                 T("Lockdown ON: only mods can use commands") if on else T("Lockdown off"))
-        self.discord_log("🔒 Lockdown on (only mods can use commands)" if on else "🔓 Lockdown off",
+                 T("Lockdown on") if on else T("Lockdown off"))
+        self.discord_log("Lockdown on (only mods can use commands)" if on else "Lockdown off",
                          "log_mod_actions")
 
     def discord_log(self, text: str, category: str = "log_vm_events"):
@@ -1781,13 +1781,13 @@ class MainWindow(QMainWindow):
         user = self.history.item(row, 1).text()
         uid = self.history.item(row, 2).text()
         menu = QMenu(self)
-        menu.addAction("🔨  " + T("Ban {user}").format(user=user),
+        menu.addAction(T("Ban {user}").format(user=user),
                        lambda: self.add_id_to(self.bans_editor, uid, "Banned {user}", user))
-        menu.addAction("🛡️  " + T("Make {user} a mod").format(user=user),
+        menu.addAction(T("Make {user} a mod").format(user=user),
                        lambda: self.add_id_to(self.mods_editor, uid, "{user} is now a mod", user))
         menu.addSeparator()
-        menu.addAction("📋  " + T("Copy user ID"), lambda: QApplication.clipboard().setText(uid))
-        menu.addAction("📋  " + T("Copy command"),
+        menu.addAction(T("Copy user ID"), lambda: QApplication.clipboard().setText(uid))
+        menu.addAction(T("Copy command"),
                        lambda: QApplication.clipboard().setText(self.history.item(row, 3).text()))
         menu.exec(self.history.viewport().mapToGlobal(pos))
 
@@ -1976,15 +1976,15 @@ class MainWindow(QMainWindow):
             lines = [f"{T(label):<22}{info.get(k, '?')}" for k, label in keys]
             warnings = []
             if info.get("nic1", "none") not in ("none", "null"):
-                warnings.append("⚠ " + T("Network is enabled: anything people do online comes from your IP."))
+                warnings.append(T("Network is enabled: anything people do online comes from your IP."))
             if info.get("clipboard", "disabled") != "disabled":
-                warnings.append("⚠ " + T("Shared clipboard is on."))
+                warnings.append(T("Shared clipboard is on."))
             if info.get("draganddrop", "disabled") != "disabled":
-                warnings.append("⚠ " + T("Drag and drop is on."))
+                warnings.append(T("Drag and drop is on."))
             if any(k.startswith("SharedFolderName") for k in info):
-                warnings.append("⚠ " + T("The VM has shared folders."))
+                warnings.append(T("The VM has shared folders."))
             if info.get("pointingdevice") not in (None, "usbtablet", "usbmultitouch", "usbmtscreenpluspad"):
-                warnings.append("ℹ " + T("Pointing device isn't USB Tablet; clicks may not work without Guest Additions."))
+                warnings.append(T("Pointing device isn't USB Tablet; clicks may not work without Guest Additions."))
             self.vm_info_text.setPlainText("\n".join(lines + ([""] + warnings if warnings else [])))
 
         self.run_task(self.vbox.info, done=done, quiet=True)
@@ -2039,14 +2039,14 @@ class MainWindow(QMainWindow):
         self.run_task(self.vbox.revert, name, self.start_mode_combo.currentText(),
                       done=lambda _: (self.log("ok", T("Restored '{name}'").format(name=name)),
                                       self.refresh_snapshots(),
-                                      self.discord_log(f"⏪ Restored snapshot '{name}'"),
+                                      self.discord_log(f"Restored snapshot '{name}'"),
                                       QTimer.singleShot(4000, lambda: self.refresh_preview(force=True))))
 
     def vm_start(self):
         mode = self.start_mode_combo.currentText()
         self.log("info", T("Starting VM ({mode})…").format(mode=mode))
         self.run_task(self.vbox.start, mode, done=lambda _: (
-            self.log("ok", T("VM started")), self.poll_vm_state(), self.discord_log("▶ VM started")))
+            self.log("ok", T("VM started")), self.poll_vm_state(), self.discord_log("VM started")))
 
     def vm_action(self, method: str, message: str, confirm: str = ""):
         # message is English for the Discord log; the panel shows it translated
@@ -2094,7 +2094,7 @@ class MainWindow(QMainWindow):
 
         def done(_):
             self.log("ok", T("Reverted"))
-            self.discord_log(f"⏪ Reverted to {label}")
+            self.discord_log(f"Reverted to {label}")
             if self.bot_thread and self.bot_thread.bot:
                 self.bot_thread.bot.last_revert = time.monotonic()
                 self.bot_thread.bot.votes.clear()
