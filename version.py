@@ -2,4 +2,4 @@
 __version__ = "1.2.0"
 
 # GitHub repo that releases are published to and updates are downloaded from
-REPO = "lompendans/discord-uses-vm"
+REPO = "Chat-Uses/discord-uses-vm"

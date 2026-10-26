@@ -82,6 +82,7 @@ DA = {
     "Where to send it. Channels appear once the bot is online.":
         "Hvor den skal sendes hen. Kanalerne vises, når botten er online.",
     "Reload channel list": "Genindlæs kanallisten",
+    "Reload": "Genindlæs",
     "Write a message…": "Skriv en besked…",
     "Send": "Send",
     "No preview yet": "Ingen visning endnu",
@@ -200,7 +201,7 @@ DA = {
         "Tegn altid koordinatgitteret (ellers kun ved !grid)",
     "Grid size": "Gitterstørrelse",
     "Panel preview refresh": "Opdatering af visningen",
-    "Votes for !revert and !reboot": "Afstemninger for !revert og !reboot",
+    "Votes for revert and reboot": "Afstemninger for revert og reboot",
     "Anyone can start a vote. It passes when enough of the people active in the command channels "
     "agree. Mods skip the vote and it happens instantly.":
         "Alle kan starte en afstemning. Den vedtages, når nok af de aktive i kommandokanalerne er "
@@ -221,11 +222,11 @@ DA = {
         "Folk med Administrer server er altid mods. Mods springer ventetider og blokeringer over.",
     "Banned users": "Udelukkede brugere",
     "User ID": "Bruger-ID",
-    "Banned users are silently ignored. Mods can also use !ban / !unban.":
-        "Udelukkede brugere ignoreres i stilhed. Mods kan også bruge !ban / !unban.",
+    "Banned users are ignored. Mods can also use !ban / !unban.":
+        "Udelukkede brugere ignoreres. Mods kan også bruge !ban / !unban.",
     "Blocked key combos": "Blokerede tastekombinationer",
     "e.g. ctrl+alt+del, alt+f4": "f.eks. ctrl+alt+del, alt+f4",
-    "Blocked words for !type": "Blokerede ord for !type",
+    "Blocked words for type command": "Blokerede ord for type-kommandoen",
     "Word or phrase": "Ord eller sætning",
     "Add": "Tilføj",
     "Remove": "Fjern",
@@ -287,7 +288,7 @@ DA = {
     "Bot is online": "Botten er online",
     "Found {n} VM(s)": "Fandt {n} VM('er)",
     "Selected VM: {name}": "Valgt VM: {name}",
-    "Lockdown ON: only mods can use commands": "Kun mods TIL: kun mods kan bruge kommandoer",
+    "Lockdown on": "Kun mods til",
     "Lockdown off": "Kun mods fra",
     "Sending announcement…": "Sender meddelelse…",
     "History exported to {path}": "Historik eksporteret til {path}",
