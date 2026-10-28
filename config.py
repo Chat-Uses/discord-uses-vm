@@ -84,6 +84,9 @@ class Config:
     max_chain_wait: float = 30  # total !wait seconds per chained message
     grid: bool = False  # always draw the grid; otherwise only on !grid
     grid_size: int = 100
+    show_cursor: bool = True  # mark where the mouse is on screenshots after mouse commands
+    queue_notice: bool = True  # tell people how many commands are ahead of theirs
+    suggest_commands: bool = True  # "did you mean !click?" for mistyped commands
 
     # Votes for !revert / !reboot
     vote_ratio: float = 0.5  # share of active chatters needed
@@ -104,6 +107,8 @@ class Config:
     preview_interval: float = 2.0
     dark_theme: bool = True
     language: str = "en"  # control panel language: en | da
+    window_geometry: str = ""  # panel size/position, restored on start
+    last_page: int = 0
 
     # Updates
     auto_check_updates: bool = True

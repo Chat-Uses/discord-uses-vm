@@ -6,7 +6,7 @@ People type commands in a Discord channel. The bot runs them on a VirtualBox VM 
 !key win              !key enter 3           !combo win+r
 !combo ctrl+alt+del   !type hello            !send notepad      (type + Enter)
 !run                  !run notepad           (open the Run box, optionally run something)
-!click 500 300        !click 500 300 right   !drag 100 100 400 300   !scroll down 5
+!click C7             !click 500 300 right   !drag A1 C5             !scroll down 5
 !m cmd                !macros                (saved macros)
 !screen   !grid   !wait 5   !startvm   !keys   !vminfo   !stats   !help
 Votes: !revert  !reboot   (instant for mods; mods can also do !revert <snapshot>)
@@ -20,6 +20,12 @@ Mods: !lock  !unlock  !ban @user  !unban @user
 ```
 
 Chainable: key, combo, type, send, run, click, move, drag, scroll, wait, screen, grid. Limits (10 commands, 30 s of waiting per message) are on the Commands page.
+
+**Clicking:** `!grid` shows the screen with lettered columns and numbered rows. Click the middle of a cell with `!click C7`, or an exact spot with `!click 500 300`. Cells work in `!move`, `!drag` and `!scroll` too. After a mouse command, the screenshot marks where the mouse is with a pink ring, since VirtualBox screenshots don't show the cursor.
+
+**Busy?** When others' commands are running, the bot replies right away with how many are ahead of yours, and removes that message when yours starts.
+
+**Typos:** `!clik C7` gets a reply like "Did you mean `!click C7`?", and typing a macro name as a command (`!hello`) points to `!m hello`.
 
 **Macros:** named chains you set up on the Commands page, which anyone runs with `!m <name>` (e.g. `!m cmd` → `!run cmd`). Write them with `!` even if you changed the prefix.
 
@@ -63,12 +69,14 @@ The VM tab's details box warns you if any of these are wrong.
 | Tab | What's there |
 |---|---|
 | 🖥️ Dashboard | Live VM preview (click it to control the VM yourself), type/key box, quick keys, save screenshot, bot/VM status, uptime, command count, VM quick actions, announcements to channels |
-| 💬 Discord | Token (hidden), invite link, prefix, "Playing…" status, command channels, log channel, screenshot options |
+| 💬 Discord | Token (hidden), invite link, prefix, "Playing…" status (the source code link is always added after it), command channels, log channel, screenshot options |
 | 📦 Virtual Machine | VBoxManage path + version check, VM picker, start mode (headless/GUI), start/shutdown/reset/pause/resume/power off, snapshots (take/restore), which snapshot to revert to, auto-revert timer, VM details with safety warnings |
-| ⌨️ Commands | Turn each command on/off, cooldown, screenshot delay, max type length, max repeats, grid on/off + size, preview refresh rate |
+| ⌨️ Commands | Turn each command on/off, cooldown, screenshot delay, max type length, max repeats, queue messages, typo suggestions, grid on/off + size, mouse marker, preview refresh rate |
 | 🛡️ Moderation | Mod role, mod user IDs, banned users, blocked key combos, blocked words |
 | 📊 Activity | Live command history (right-click a row to ban, make mod, or copy ID), top users, export to CSV |
 | 📜 Logs | Colored log with filter and search, export, daily log files in `logs/` |
+
+The panel reopens at the size, position and page you left it on.
 
 Sidebar: start/stop the bot, save (Ctrl+S), **Lockdown** (only mods can use commands), dark/light theme, and the panel language (**English / Dansk**, switches instantly). Translations live in `gui_lang.py`.
 
@@ -95,5 +103,5 @@ The panel checks GitHub for a new release when it starts and every 6 hours (swit
 
 - Commands run one at a time, so every screenshot matches its command.
 - Raise *Wait before screenshot* or use `!wait` if screenshots come back before the screen has updated.
-- `!type` follows the guest's keyboard layout; a US layout in the guest works best.
+- Set the VM's keyboard layout on the Virtual Machine page so typed text comes out right.
 - Mods are people with the mod role, the listed mod IDs, or *Manage Server*. Mods skip cooldowns and blocked keys/words.

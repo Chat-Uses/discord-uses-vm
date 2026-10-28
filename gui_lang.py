@@ -104,7 +104,13 @@ DA = {
     "Invite bot to server": "Inviter botten til serveren",
     "Command prefix": "Kommandopræfiks",
     "Status text": "Statustekst",
-    "Shown as 'Playing …' (empty = none)": "Vises som 'Spiller …' (tom = ingen)",
+    "Shown as 'Playing …'": "Vises som 'Spiller …'",
+    "The bot always adds “Source code available on github.com/Chat-Uses/discord-uses-vm” after the status text.":
+        "Botten tilføjer altid “Source code available on github.com/Chat-Uses/discord-uses-vm” efter statusteksten.",
+    "Mark the mouse position after !click, !move, !drag and !scroll":
+        "Vis musens position efter !click, !move, !drag og !scroll",
+    "Tell people how many commands are ahead of theirs": "Fortæl folk, hvor mange kommandoer der er foran deres",
+    "Suggest the right command when someone makes a typo": "Foreslå den rigtige kommando ved stavefejl",
     "The bot needs <b>Message Content Intent</b> turned on in the Developer Portal (Bot page).":
         "Botten skal have <b>Message Content Intent</b> slået til i Developer Portal (siden Bot).",
     "Channels": "Kanaler",

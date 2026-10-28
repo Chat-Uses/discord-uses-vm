@@ -1,5 +1,7 @@
 """The Discord bot: runs commands on the VM, then replies with a screenshot."""
 import asyncio
+import contextlib
+import difflib
 import io
 import json
 import math
@@ -14,7 +16,11 @@ from discord.ext import commands
 
 from config import MOD_COMMANDS, STATS_PATH, VOTE_COMMANDS, Config
 import keyboard_layouts
-from vbox_control import ALIASES, KEYS, VBox, VBoxError, add_grid, combo_scancodes, normalize_combo
+from vbox_control import (ALIASES, KEYS, VBox, VBoxError, add_grid, cell_center, combo_scancodes,
+                          mark_cursor, normalize_combo)
+from version import REPO
+
+SOURCE_TEXT = f"Source code available on https://github.com/{REPO}"
 
 
 class Events:
@@ -49,6 +55,7 @@ class Step:
     wait: float = 0.0  # seconds to sleep afterwards (!wait)
     snapshot: bool = False  # take a screenshot at this point (!screen / !grid)
     grid: bool = False
+    point: tuple[int, int] | None = None  # where the mouse ends up, marked on the screenshot
 
 
 # Commands that can be chained in one message, e.g. "!combo win+r !wait 2 !send notepad"
@@ -60,10 +67,10 @@ USAGE = {
     "type": "{p}type <text>",
     "send": "{p}send <text>",
     "run": "{p}run [program]",
-    "click": "{p}click <x> <y> [left|right|middle|double]",
-    "move": "{p}move <x> <y>",
-    "drag": "{p}drag <x1> <y1> <x2> <y2>",
-    "scroll": "{p}scroll <up|down> [amount] [x y]",
+    "click": "{p}click <x> <y>|<cell> [left|right|middle|double]",
+    "move": "{p}move <x> <y>|<cell>",
+    "drag": "{p}drag <from> <to>  (each is x y or a cell like C7)",
+    "scroll": "{p}scroll <up|down> [amount] [x y|cell]",
     "wait": "{p}wait [seconds]",
     "screen": "{p}screen",
     "grid": "{p}grid",
@@ -110,6 +117,7 @@ class VMBot(commands.Bot):
         self.events = events or Events()
         self.vbox = VBox(config)
         self.vm_lock = asyncio.Lock()  # one action at a time so screenshots match
+        self.waiting = 0  # commands queued behind the one running
         self.stats = self._load_stats()  # {"total": n, "users": {id: {"name", "count"}}}
         self.total_commands = 0  # since this start
         self.started_at = time.time()
@@ -160,8 +168,12 @@ class VMBot(commands.Bot):
         await super().close()
 
     async def refresh_presence(self) -> None:
+        # The source link is always shown; the custom text goes in front, cut to Discord's 128 limit
         text = self.config.status_text.strip()
-        await self.change_presence(activity=discord.Game(text) if text else None)
+        if text:
+            room = 128 - len(SOURCE_TEXT) - 3
+            text = (text if len(text) <= room else text[:room - 1] + "…") + " | " + SOURCE_TEXT
+        await self.change_presence(activity=discord.Game(text or SOURCE_TEXT))
 
     async def on_message(self, message: discord.Message) -> None:
         if (not message.author.bot and self.in_command_channel(message.channel)
@@ -423,11 +435,35 @@ class VMBot(commands.Bot):
         self.events.command(str(ctx.author), ctx.author.id, ctx.message.content, ok, result)
         self.events.log("info" if ok else "warn", f"{ctx.author}: {ctx.message.content} -> {result}")
 
-    async def _screenshot(self, grid: bool) -> bytes:
+    async def _screenshot(self, grid: bool, point: tuple[int, int] | None = None) -> bytes:
         png = await asyncio.to_thread(self.vbox.screenshot)
+        if point and self.config.show_cursor:
+            png = await asyncio.to_thread(mark_cursor, png, *point)
         if grid:
             png = await asyncio.to_thread(add_grid, png, self.config.grid_size)
         return png
+
+    @contextlib.asynccontextmanager
+    async def vm_turn(self, ctx):
+        """Wait for the VM, telling the user how many commands are ahead of theirs."""
+        notice = None
+        ahead = self.waiting + self.vm_lock.locked()
+        if ahead and self.config.queue_notice:
+            with contextlib.suppress(discord.HTTPException):
+                notice = await ctx.reply(f"⏳ {ahead} ahead of you, hang on…", mention_author=False)
+        self.waiting += 1
+        started = False
+        try:
+            async with self.vm_lock:
+                started = True
+                self.waiting -= 1
+                if notice:
+                    with contextlib.suppress(discord.HTTPException):
+                        await notice.delete()
+                yield
+        finally:
+            if not started:  # cancelled while waiting
+                self.waiting -= 1
 
     async def run_steps(self, ctx, steps: list[Step], title: str = "") -> None:
         """Run steps in order on the VM, then reply with the screenshot(s).
@@ -436,22 +472,24 @@ class VMBot(commands.Bot):
         shots: list[bytes] = []
         done: list[str] = []
         error = None
-        async with self.vm_lock:
+        point = None  # last mouse position in this run
+        async with self.vm_turn(ctx):
             async with ctx.typing():
                 try:
                     for step in steps:
                         if step.action is not None:
                             await asyncio.to_thread(step.action)
+                        point = step.point or point
                         if step.wait:
                             await asyncio.sleep(step.wait)
                         if step.snapshot:
-                            shots.append(await self._screenshot(step.grid or cfg.grid))
+                            shots.append(await self._screenshot(step.grid or cfg.grid, point))
                         done.append(step.label)
                     if not steps[-1].snapshot:
                         # Give the screen a moment to update after the last input
                         if steps[-1].action is not None:
                             await asyncio.sleep(cfg.screenshot_delay)
-                        shots.append(await self._screenshot(cfg.grid))
+                        shots.append(await self._screenshot(cfg.grid, point))
                 except VBoxError as e:
                     error = f"Step {len(done) + 1}: {e}" if len(steps) > 1 else str(e)
 
@@ -480,7 +518,7 @@ class VMBot(commands.Bot):
         cfg = self.config
         grid = cfg.grid if grid is None else grid
         png, error = None, None
-        async with self.vm_lock:
+        async with self.vm_turn(ctx):
             async with ctx.typing():
                 try:
                     if action is not None:
@@ -610,8 +648,33 @@ class VMBot(commands.Bot):
         self.config.live_message_id = self._live_message.id
         self.config.save()
 
+    async def suggest_command(self, ctx: commands.Context) -> None:
+        """Reply "did you mean !click?" when someone mistypes a command."""
+        cfg = self.config
+        if (not cfg.suggest_commands or not ctx.invoked_with or not self.in_command_channel(ctx.channel)
+                or ctx.author.id in cfg.banned_user_ids):
+            return
+        names = {}
+        for cmd in self.commands:
+            if cmd.hidden or cmd.name in cfg.disabled_commands:
+                continue
+            for n in (cmd.name, *cmd.aliases):
+                names[n] = cmd.name
+        typed = ctx.invoked_with.lower()
+        if typed in {k.lower() for k in cfg.macros} and "macro" not in cfg.disabled_commands:
+            await ctx.reply(f"❓ That's a macro, run it with `{cfg.prefix}m {typed}`",
+                            mention_author=False, delete_after=15)
+            return
+        match = difflib.get_close_matches(typed, list(names), n=1, cutoff=0.7)
+        if match:
+            rest = ctx.message.content[len(cfg.prefix) + len(ctx.invoked_with):]
+            fixed = f"{cfg.prefix}{match[0]}{rest}"[:200]
+            await ctx.reply(f"❓ Unknown command. Did you mean `{fixed.replace('`', chr(39))}`?",
+                            mention_author=False, delete_after=15)
+
     async def on_command_error(self, ctx: commands.Context, error) -> None:
         if isinstance(error, commands.CommandNotFound):
+            await self.suggest_command(ctx)
             return
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.reply(
@@ -669,6 +732,25 @@ class VMCog(commands.Cog):
             return int(value)
         except ValueError:
             raise commands.BadArgument(f"`{value}` isn't a number ({what}).")
+
+    def _points(self, a: list[str], count: int, usage: str) -> tuple[list[tuple[int, int]], list[str]]:
+        """Read `count` positions from the arguments, each either "x y" or a grid cell like "C7".
+        Returns the positions and the arguments left over."""
+        points, i = [], 0
+        while len(points) < count:
+            if i >= len(a):
+                raise commands.BadArgument(f"Usage: `{usage}`")
+            cell = cell_center(a[i], self.cfg.grid_size)
+            if cell and not a[i].isdigit():
+                points.append(cell)
+                i += 1
+            elif i + 1 < len(a):
+                points.append((self._int(a[i], "x"), self._int(a[i + 1], "y")))
+                i += 2
+            else:
+                raise commands.BadArgument(
+                    f"`{a[i]}` isn't a grid cell like `C7` or an x y position. Usage: `{usage}`")
+        return points, a[i:]
 
     def _key_step(self, ctx, combo: str, times_arg: str | None) -> Step:
         try:
@@ -755,23 +837,32 @@ class VMCog(commands.Cog):
                 self.vbox.send_combo("enter")
             return Step(f"🏃 ran “{discord.utils.escape_markdown(program)}”", run_program)
 
+        def where(pos: tuple[int, int], arg: str) -> str:
+            return f"{arg.upper()} ({pos[0]}, {pos[1]})" if cell_center(arg, 1) else f"({pos[0]}, {pos[1]})"
+
         if name == "click":
-            need(2, 3)
-            x, y = self._int(a[0], "x"), self._int(a[1], "y")
-            button = a[2].lower() if len(a) > 2 else "left"
+            [(x, y)], rest = self._points(a, 1, usage)
+            if len(rest) > 1:
+                raise commands.BadArgument(f"Usage: `{usage}`")
+            button = rest[0].lower() if rest else "left"
             if button not in ("left", "right", "middle", "double"):
                 raise commands.BadArgument("Button must be left, right, middle or double.")
-            return Step(f"🖱️ {button} click at ({x}, {y})", lambda: self.vbox.click(x, y, button))
+            return Step(f"🖱️ {button} click at {where((x, y), a[0])}",
+                        lambda: self.vbox.click(x, y, button), point=(x, y))
 
         if name == "move":
-            need(2, 2)
-            x, y = self._int(a[0], "x"), self._int(a[1], "y")
-            return Step(f"🖱️ moved to ({x}, {y})", lambda: self.vbox.mouse([(x, y, 0, 0)]))
+            [(x, y)], rest = self._points(a, 1, usage)
+            if rest:
+                raise commands.BadArgument(f"Usage: `{usage}`")
+            return Step(f"🖱️ moved to {where((x, y), a[0])}",
+                        lambda: self.vbox.mouse([(x, y, 0, 0)]), point=(x, y))
 
         if name == "drag":
-            need(4, 4)
-            x1, y1, x2, y2 = (self._int(v, "coordinate") for v in a)
-            return Step(f"🖱️ dragged ({x1}, {y1}) → ({x2}, {y2})", lambda: self.vbox.drag(x1, y1, x2, y2))
+            [(x1, y1), (x2, y2)], rest = self._points(a, 2, usage)
+            if rest:
+                raise commands.BadArgument(f"Usage: `{usage}`")
+            return Step(f"🖱️ dragged ({x1}, {y1}) → ({x2}, {y2})",
+                        lambda: self.vbox.drag(x1, y1, x2, y2), point=(x2, y2))
 
         if name == "scroll":
             need(1, 4)
@@ -780,10 +871,14 @@ class VMCog(commands.Cog):
                 raise commands.BadArgument("Direction must be up or down.")
             amount = self._int(a[1], "amount") if len(a) > 1 else 3
             amount = max(1, min(amount, self.cfg.max_repeat))
-            x = self._int(a[2], "x") if len(a) > 2 else 400
-            y = self._int(a[3], "y") if len(a) > 3 else 300
+            x, y = 400, 300
+            if len(a) > 2:
+                [(x, y)], rest = self._points(a[2:], 1, usage)
+                if rest:
+                    raise commands.BadArgument(f"Usage: `{usage}`")
             signed = amount if direction == "down" else -amount
-            return Step(f"🖱️ scrolled {direction} ×{amount}", lambda: self.vbox.scroll(x, y, signed))
+            return Step(f"🖱️ scrolled {direction} ×{amount}", lambda: self.vbox.scroll(x, y, signed),
+                        point=(x, y) if len(a) > 2 else None)
 
         if name == "wait":
             need(0, 1)
@@ -798,7 +893,8 @@ class VMCog(commands.Cog):
             return Step("📸", None, snapshot=True)
 
         if name == "grid":
-            return Step(f"📐 Use these numbers with `{p}click <x> <y>`", None, snapshot=True, grid=True)
+            return Step(f"📐 Click a cell with `{p}click C7`, or a spot with `{p}click <x> <y>`",
+                        None, snapshot=True, grid=True)
 
         raise commands.BadArgument(f"`{p}{name}` can't be used here.")
 
@@ -1042,10 +1138,11 @@ class VMCog(commands.Cog):
             "send": f"`{p}send <text>` type text and press Enter",
             "run": f"`{p}run [program]` open the Run box, e.g. `{p}run notepad`",
             "macro": f"`{p}m <name>` run a saved macro (`{p}macros` lists them)",
-            "click": f"`{p}click <x> <y> [left|right|middle|double]` click (use `{p}grid` to find x/y)",
-            "grid": f"`{p}grid` screenshot with a coordinate grid, for aiming clicks",
-            "move": f"`{p}move <x> <y>` move the mouse",
-            "drag": f"`{p}drag <x1> <y1> <x2> <y2>` drag",
+            "click": f"`{p}click <cell|x y> [left|right|middle|double]` click, e.g. `{p}click C7` "
+                     f"or `{p}click 500 300`",
+            "grid": f"`{p}grid` screenshot with a labelled grid, for aiming clicks",
+            "move": f"`{p}move <cell|x y>` move the mouse",
+            "drag": f"`{p}drag <from> <to>` drag, e.g. `{p}drag A1 C5`",
             "scroll": f"`{p}scroll <up|down> [n] [x y]` scroll",
             "screen": f"`{p}screen` screenshot",
             "wait": f"`{p}wait [seconds]` wait then screenshot",
@@ -1076,6 +1173,7 @@ class VMCog(commands.Cog):
             text += "\n**Mods:** " + " · ".join(mods)
         if self.cfg.lockdown:
             text += "\n🔒 *The VM is currently locked to mods.*"
+        text += f"\n-# {SOURCE_TEXT.replace('https://', '<https://')}>"
         await ctx.reply(text, mention_author=False)
 
     # --- votes ----------------------------------------------------------------

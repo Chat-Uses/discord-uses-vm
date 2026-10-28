@@ -40,6 +40,9 @@
   "max_chain_wait": 30,
   "grid": false,
   "grid_size": 100,
+  "show_cursor": true,
+  "queue_notice": true,
+  "suggest_commands": true,
   "vote_ratio": 0.5,
   "vote_min": 1,
   "vote_window_minutes": 10,
@@ -54,6 +57,8 @@
   "preview_interval": 2.0,
   "dark_theme": true,
   "language": "en",
+  "window_geometry": "",
+  "last_page": 0,
   "auto_check_updates": true,
   "skipped_version": ""
 }

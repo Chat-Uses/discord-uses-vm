@@ -12,7 +12,7 @@ from string import Template
 
 import discord
 from PyQt6.QtCore import (
-    QEasingCurve, QObject, QProcess, QPropertyAnimation, QRectF, QRegularExpression, QRunnable,
+    QByteArray, QEasingCurve, QObject, QProcess, QPropertyAnimation, QRectF, QRegularExpression, QRunnable,
     QThread, QThreadPool, QTimer, QUrl, Qt, pyqtProperty, pyqtSignal,
 )
 from PyQt6.QtGui import (
@@ -688,7 +688,10 @@ class MainWindow(QMainWindow):
         save = QAction(self, triggered=self.save_settings)
         save.setShortcut(QKeySequence.StandardKey.Save)
         self.addAction(save)
-        self.go(0)
+        # Open where the panel was last time: same size, position and page
+        if self.config.window_geometry:
+            self.restoreGeometry(QByteArray.fromBase64(self.config.window_geometry.encode()))
+        self.go(min(max(0, self.config.last_page), len(pages) - 1))
 
         self.populate()
         self.update_bot_ui()
@@ -789,6 +792,7 @@ class MainWindow(QMainWindow):
 
     def go(self, index: int):
         self.stack.setCurrentIndex(index)
+        self.config.last_page = index
         self.nav.button(index).setChecked(True)
         if index == 0:
             self.refresh_preview(force=True)
@@ -940,8 +944,10 @@ class MainWindow(QMainWindow):
         self.prefix_edit.setMaximumWidth(90)
         f.addRow("Command prefix", self.prefix_edit)
         self.status_edit = QLineEdit()
-        self.status_edit.setPlaceholderText("Shown as 'Playing …' (empty = none)")
+        self.status_edit.setPlaceholderText("Shown as 'Playing …'")
         f.addRow("Status text", self.status_edit)
+        f.addRow(hint("The bot always adds “Source code available on github.com/Chat-Uses/discord-uses-vm” "
+                      "after the status text."))
         f.addRow(hint("The bot needs <b>Message Content Intent</b> turned on in the Developer Portal (Bot page)."))
         v.addWidget(bot)
 
@@ -1188,6 +1194,10 @@ class MainWindow(QMainWindow):
         self.max_chain_wait_spin.setRange(0, 300)
         self.max_chain_wait_spin.setSuffix(" s")
         f.addRow("Max total !wait per chain", self.max_chain_wait_spin)
+        self.chk_queue = Toggle("Tell people how many commands are ahead of theirs")
+        f.addRow(self.chk_queue)
+        self.chk_suggest = Toggle("Suggest the right command when someone makes a typo")
+        f.addRow(self.chk_suggest)
         row.addWidget(lim, 1)
 
         ss = QGroupBox("Screenshots")
@@ -1199,6 +1209,8 @@ class MainWindow(QMainWindow):
         self.grid_spin.setSingleStep(10)
         self.grid_spin.setSuffix(" px")
         sf.addRow("Grid size", self.grid_spin)
+        self.chk_cursor = Toggle("Mark the mouse position after !click, !move, !drag and !scroll")
+        sf.addRow(self.chk_cursor)
         self.preview_spin = QDoubleSpinBox()
         self.preview_spin.setRange(0.5, 60)
         self.preview_spin.setSingleStep(0.5)
@@ -1417,6 +1429,9 @@ class MainWindow(QMainWindow):
         self.max_chain_wait_spin.setValue(c.max_chain_wait)
         self.chk_grid.setChecked(c.grid)
         self.grid_spin.setValue(c.grid_size)
+        self.chk_cursor.setChecked(c.show_cursor)
+        self.chk_queue.setChecked(c.queue_notice)
+        self.chk_suggest.setChecked(c.suggest_commands)
         self.preview_spin.setValue(c.preview_interval)
         self.vote_ratio_spin.setValue(round(c.vote_ratio * 100))
         self.vote_min_spin.setValue(c.vote_min)
@@ -1505,6 +1520,9 @@ class MainWindow(QMainWindow):
         c.max_chain_wait = self.max_chain_wait_spin.value()
         c.grid = self.chk_grid.isChecked()
         c.grid_size = self.grid_spin.value()
+        c.show_cursor = self.chk_cursor.isChecked()
+        c.queue_notice = self.chk_queue.isChecked()
+        c.suggest_commands = self.chk_suggest.isChecked()
         c.preview_interval = self.preview_spin.value()
         c.vote_ratio = self.vote_ratio_spin.value() / 100
         c.vote_min = self.vote_min_spin.value()
@@ -2267,6 +2285,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.collect()
+        self.config.window_geometry = bytes(self.saveGeometry().toBase64()).decode()
         try:
             self.config.save()
         except OSError:

@@ -106,8 +106,48 @@ def combo_scancodes(combo: str, layout: str = "us") -> list[str]:
     return codes
 
 
+def column_name(index: int) -> str:
+    """0 -> A, 25 -> Z, 26 -> AA, like spreadsheet columns."""
+    name = ""
+    index += 1
+    while index:
+        index, rem = divmod(index - 1, 26)
+        name = chr(65 + rem) + name
+    return name
+
+
+def column_index(name: str) -> int:
+    index = 0
+    for ch in name.upper():
+        index = index * 26 + ord(ch) - 64
+    return index - 1
+
+
+CELL_RE = re.compile(r"^([A-Za-z]{1,2})(\d{1,3})$")
+
+
+def cell_center(cell: str, size: int) -> tuple[int, int] | None:
+    """The middle of a grid cell like "C7" (column C, row 7), or None if it isn't one."""
+    m = CELL_RE.match(cell)
+    if not m:
+        return None
+    col, row = column_index(m.group(1)), int(m.group(2)) - 1
+    if row < 0:
+        return None
+    size = max(20, size)
+    return col * size + size // 2, row * size + size // 2
+
+
+def _font(size: int):
+    from PIL import ImageFont
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:  # Pillow < 10.1
+        return ImageFont.load_default()
+
+
 def add_grid(png: bytes, size: int = 100) -> bytes:
-    """Overlay a coordinate grid so people can aim clicks."""
+    """Overlay a grid with cell names (A1, B2, ...) and pixel coordinates so people can aim clicks."""
     try:
         from PIL import Image, ImageDraw
     except ImportError:
@@ -116,12 +156,38 @@ def add_grid(png: bytes, size: int = 100) -> bytes:
     img = Image.open(io.BytesIO(png)).convert("RGB")
     draw = ImageDraw.Draw(img, "RGBA")
     w, h = img.size
+    font = _font(max(10, min(16, size // 4)))
+    small = _font(10)
+    label = dict(fill=(255, 230, 0, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
     for x in range(size, w, size):
-        draw.line([(x, 0), (x, h)], fill=(255, 0, 0, 60))
-        draw.text((x + 2, 2), str(x), fill=(255, 40, 40, 255))
+        draw.line([(x, 0), (x, h)], fill=(255, 0, 0, 70))
+        draw.text((x + 2, h - 14), str(x), font=small, fill=(255, 60, 60, 255),
+                  stroke_width=1, stroke_fill=(0, 0, 0, 255))
     for y in range(size, h, size):
-        draw.line([(0, y), (w, y)], fill=(255, 0, 0, 60))
-        draw.text((2, y + 2), str(y), fill=(255, 40, 40, 255))
+        draw.line([(0, y), (w, y)], fill=(255, 0, 0, 70))
+        draw.text((w - 30, y + 2), str(y), font=small, fill=(255, 60, 60, 255),
+                  stroke_width=1, stroke_fill=(0, 0, 0, 255))
+    # Cell names along the top and the left edge
+    for i, x in enumerate(range(0, w, size)):
+        draw.text((x + size // 2, 3), column_name(i), font=font, anchor="ma", **label)
+    for i, y in enumerate(range(0, h, size)):
+        draw.text((4, y + size // 2), str(i + 1), font=font, anchor="lm", **label)
+    out = io.BytesIO()
+    img.save(out, "PNG")
+    return out.getvalue()
+
+
+def mark_cursor(png: bytes, x: int, y: int) -> bytes:
+    """Draw a ring where the mouse is, since VirtualBox screenshots leave the cursor out."""
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        return png
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+    draw = ImageDraw.Draw(img, "RGBA")
+    for r, color in ((12, (0, 0, 0, 200)), (10, (255, 40, 200, 255))):
+        draw.ellipse([x - r, y - r, x + r, y + r], outline=color, width=3)
+    draw.ellipse([x - 2, y - 2, x + 2, y + 2], fill=(255, 40, 200, 255))
     out = io.BytesIO()
     img.save(out, "PNG")
     return out.getvalue()
